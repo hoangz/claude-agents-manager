@@ -10,6 +10,7 @@ const { fetchAll: fetchWorkflows, workflows } = useWorkflows()
 const initialized = ref(false)
 const showSearch = ref(false)
 const sidebarOpen = ref(false)
+const sidebarCollapsed = ref(false)
 const { isPanelOpen: chatOpen } = useChat()
 const { workingDir, displayPath, setWorkingDir, clearWorkingDir } = useWorkingDir()
 const colorMode = useColorMode()
@@ -163,9 +164,13 @@ function badgeFor(to: string) {
 
       <!-- Sidebar -->
       <aside
-        class="sidebar w-[200px] shrink-0 flex flex-col relative h-full overflow-hidden fixed inset-y-0 left-0 z-40 -translate-x-full md:relative md:z-auto md:translate-x-0 transition-transform duration-200"
+        class="sidebar shrink-0 flex flex-col relative h-full overflow-hidden fixed inset-y-0 left-0 z-40 -translate-x-full md:relative md:z-auto md:translate-x-0 transition-all duration-300"
         :class="{ 'translate-x-0': sidebarOpen }"
-        style="background: var(--sidebar-bg); border-right: 1px solid var(--border-subtle);"
+        :style="{
+          width: sidebarCollapsed ? '56px' : '200px',
+          background: 'var(--sidebar-bg)',
+          borderRight: '1px solid var(--border-subtle)',
+        }"
       >
         <!-- Ambient glow at top — stronger -->
         <div
@@ -174,36 +179,53 @@ function badgeFor(to: string) {
         />
 
         <!-- Brand -->
-        <div class="h-[56px] flex items-center gap-2.5 px-4 relative">
-          <div
-            class="size-7 rounded-lg flex items-center justify-center relative"
-            style="background: linear-gradient(135deg, rgba(229, 169, 62, 0.18) 0%, rgba(229, 169, 62, 0.06) 100%); border: 1px solid rgba(229, 169, 62, 0.15);"
+        <div class="h-[56px] flex items-center gap-2.5 relative" :class="sidebarCollapsed ? 'justify-center px-2' : 'px-4'">
+          <template v-if="!sidebarCollapsed">
+            <div
+              class="size-7 rounded-lg flex items-center justify-center relative shrink-0"
+              style="background: linear-gradient(135deg, rgba(229, 169, 62, 0.18) 0%, rgba(229, 169, 62, 0.06) 100%); border: 1px solid rgba(229, 169, 62, 0.15);"
+            >
+              <UIcon name="i-lucide-bot" class="size-3.5" style="color: var(--accent);" />
+            </div>
+            <div class="flex-1 flex flex-col min-w-0">
+              <span class="text-[12px] font-semibold tracking-tight" style="color: var(--text-primary); font-family: var(--font-display);">
+                Agent Manager
+              </span>
+              <span class="text-[9px] font-mono tracking-wider uppercase" style="color: var(--text-disabled);">
+                Claude Code
+              </span>
+            </div>
+          </template>
+          <!-- Collapse toggle -->
+          <button
+            class="hidden md:flex size-7 items-center justify-center rounded-lg transition-all duration-150 focus-ring press-scale shrink-0"
+            style="color: var(--text-tertiary);"
+            :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+            @mouseenter="($event.currentTarget as HTMLElement).style.background = 'var(--surface-hover)'"
+            @mouseleave="($event.currentTarget as HTMLElement).style.background = 'transparent'"
+            @click="sidebarCollapsed = !sidebarCollapsed"
           >
-            <UIcon name="i-lucide-bot" class="size-3.5" style="color: var(--accent);" />
-          </div>
-          <div class="flex flex-col">
-            <span class="text-[12px] font-semibold tracking-tight" style="color: var(--text-primary); font-family: var(--font-display);">
-              Agent Manager
-            </span>
-            <span class="text-[9px] font-mono tracking-wider uppercase" style="color: var(--text-disabled);">
-              Claude Code
-            </span>
-          </div>
+            <UIcon :name="sidebarCollapsed ? 'i-lucide-panel-left-open' : 'i-lucide-panel-left-close'" class="size-4" />
+          </button>
         </div>
 
         <!-- Primary Nav -->
-        <nav class="flex-1 px-2.5 pt-1 space-y-0.5 overflow-y-auto">
+        <nav class="flex-1 pt-1 space-y-0.5 overflow-y-auto" :class="sidebarCollapsed ? 'px-1.5' : 'px-2.5'">
           <NuxtLink
             v-for="link in navLinks"
             :key="link.to"
             :to="link.to"
-            class="nav-item group flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] transition-all duration-150 relative focus-ring"
-            :class="{ 'nav-item--active': isActive(link.to) }"
+            class="nav-item group flex items-center rounded-lg text-[13px] transition-all duration-150 relative focus-ring"
+            :class="[
+              sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-3 py-[7px]',
+              { 'nav-item--active': isActive(link.to) }
+            ]"
             :style="{
               color: isActive(link.to) ? 'var(--text-primary)' : 'var(--text-tertiary)',
               fontWeight: isActive(link.to) ? '500' : '400',
               background: isActive(link.to) ? 'var(--accent-muted)' : undefined,
             }"
+            :title="sidebarCollapsed ? link.label : undefined"
           >
             <!-- Active indicator bar -->
             <div
@@ -212,29 +234,33 @@ function badgeFor(to: string) {
               style="background: var(--accent); box-shadow: 0 0 10px var(--accent-glow);"
             />
             <UIcon :name="link.icon" class="size-[15px] shrink-0 transition-colors duration-150" :style="{ color: isActive(link.to) ? 'var(--accent)' : undefined }" />
-            <span class="flex-1" style="font-family: var(--font-sans);">{{ link.label }}</span>
-            <span
-              v-if="badgeFor(link.to)"
-              class="font-mono text-[10px] tabular-nums transition-colors duration-150"
-              :style="{ color: isActive(link.to) ? 'var(--accent)' : 'var(--text-disabled)' }"
-            >
-              {{ badgeFor(link.to) }}
-            </span>
+            <template v-if="!sidebarCollapsed">
+              <span class="flex-1" style="font-family: var(--font-sans);">{{ link.label }}</span>
+              <span
+                v-if="badgeFor(link.to)"
+                class="font-mono text-[10px] tabular-nums transition-colors duration-150"
+                :style="{ color: isActive(link.to) ? 'var(--accent)' : 'var(--text-disabled)' }"
+              >
+                {{ badgeFor(link.to) }}
+              </span>
+            </template>
           </NuxtLink>
 
           <!-- Separator -->
-          <div class="my-3 mx-2" style="border-top: 1px solid var(--border-subtle);" />
+          <div class="my-3" :class="sidebarCollapsed ? 'mx-1' : 'mx-2'" style="border-top: 1px solid var(--border-subtle);" />
 
           <NuxtLink
             v-for="link in navSecondary"
             :key="link.to"
             :to="link.to"
-            class="nav-item group flex items-center gap-2.5 px-3 py-[7px] rounded-lg text-[13px] transition-all duration-150 relative focus-ring"
+            class="nav-item group flex items-center rounded-lg text-[13px] transition-all duration-150 relative focus-ring"
+            :class="sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-3 py-[7px]'"
             :style="{
               color: isActive(link.to) ? 'var(--text-primary)' : 'var(--text-tertiary)',
               fontWeight: isActive(link.to) ? '500' : '400',
               background: isActive(link.to) ? 'var(--accent-muted)' : undefined,
             }"
+            :title="sidebarCollapsed ? link.label : undefined"
           >
             <div
               v-if="isActive(link.to)"
@@ -242,36 +268,42 @@ function badgeFor(to: string) {
               style="background: var(--accent); box-shadow: 0 0 10px var(--accent-glow);"
             />
             <UIcon :name="link.icon" class="size-[15px] shrink-0 transition-colors duration-150" :style="{ color: isActive(link.to) ? 'var(--accent)' : undefined }" />
-            <span style="font-family: var(--font-sans);">{{ link.label }}</span>
+            <span v-if="!sidebarCollapsed" style="font-family: var(--font-sans);">{{ link.label }}</span>
           </NuxtLink>
         </nav>
 
         <!-- Search shortcut -->
-        <div class="px-2.5 pb-2.5">
+        <div :class="sidebarCollapsed ? 'px-1.5 pb-2.5' : 'px-2.5 pb-2.5'">
           <button
-            class="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-150 focus-ring cursor-pointer press-scale"
+            class="w-full flex items-center rounded-lg transition-all duration-150 focus-ring cursor-pointer press-scale"
+            :class="sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-2 px-3 py-2'"
             style="color: var(--text-disabled); background: var(--input-bg); border: 1px solid var(--border-subtle);"
+            :title="sidebarCollapsed ? 'Search (⌘K)' : undefined"
             @mouseenter="($event.currentTarget as HTMLElement).style.borderColor = 'var(--border-default)'; ($event.currentTarget as HTMLElement).style.color = 'var(--text-tertiary)'"
             @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = 'var(--border-subtle)'; ($event.currentTarget as HTMLElement).style.color = 'var(--text-disabled)'"
             @click="showSearch = true"
           >
             <UIcon name="i-lucide-search" class="size-3.5" />
-            <span class="text-[12px] flex-1 text-left" style="font-family: var(--font-sans);">Search</span>
-            <kbd class="text-[9px] font-mono px-1.5 py-0.5 rounded" style="background: var(--badge-subtle-bg); color: var(--text-disabled);">⌘K</kbd>
+            <template v-if="!sidebarCollapsed">
+              <span class="text-[12px] flex-1 text-left" style="font-family: var(--font-sans);">Search</span>
+              <kbd class="text-[9px] font-mono px-1.5 py-0.5 rounded" style="background: var(--badge-subtle-bg); color: var(--text-disabled);">⌘K</kbd>
+            </template>
           </button>
         </div>
 
         <!-- Chat with Claude -->
-        <div class="px-2.5 pb-1">
+        <div :class="sidebarCollapsed ? 'px-1.5 pb-1' : 'px-2.5 pb-1'">
           <button
-            class="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-150 focus-ring cursor-pointer press-scale"
+            class="w-full flex items-center rounded-lg transition-all duration-150 focus-ring cursor-pointer press-scale"
+            :class="sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-2 px-3 py-2'"
             :style="{
               color: chatOpen ? 'var(--accent)' : 'var(--text-tertiary)',
               background: chatOpen ? 'var(--accent-muted)' : 'transparent',
             }"
+            :title="sidebarCollapsed ? 'Claude (⌘J)' : undefined"
             @click="chatOpen = !chatOpen"
           >
-            <div class="size-4 relative flex items-center justify-center">
+            <div class="size-4 relative flex items-center justify-center shrink-0">
               <UIcon name="i-lucide-zap" class="size-4" />
               <div
                 v-if="chatOpen"
@@ -279,43 +311,51 @@ function badgeFor(to: string) {
                 style="background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);"
               />
             </div>
-            <span class="text-[12px] flex-1 text-left" style="font-family: var(--font-sans);">Claude</span>
-            <kbd class="text-[9px] font-mono px-1.5 py-0.5 rounded" style="background: var(--badge-subtle-bg); color: var(--text-disabled);">⌘J</kbd>
+            <template v-if="!sidebarCollapsed">
+              <span class="text-[12px] flex-1 text-left" style="font-family: var(--font-sans);">Claude</span>
+              <kbd class="text-[9px] font-mono px-1.5 py-0.5 rounded" style="background: var(--badge-subtle-bg); color: var(--text-disabled);">⌘J</kbd>
+            </template>
           </button>
         </div>
 
         <!-- Theme toggle -->
-        <div class="px-2.5 pb-1">
+        <div :class="sidebarCollapsed ? 'px-1.5 pb-1' : 'px-2.5 pb-1'">
           <button
-            class="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-150 focus-ring press-scale"
+            class="w-full flex items-center rounded-lg transition-all duration-150 focus-ring press-scale"
+            :class="sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-2 px-3 py-2'"
             style="color: var(--text-tertiary);"
+            :title="sidebarCollapsed ? (colorMode.value === 'dark' ? 'Light mode' : 'Dark mode') : undefined"
             @click="toggleTheme"
           >
             <UIcon :name="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'" class="size-4" />
-            <span class="text-[12px]" style="font-family: var(--font-sans);">
+            <span v-if="!sidebarCollapsed" class="text-[12px]" style="font-family: var(--font-sans);">
               {{ colorMode.value === 'dark' ? 'Light mode' : 'Dark mode' }}
             </span>
           </button>
         </div>
 
         <!-- Footer: working directory -->
-        <div class="px-2.5 pb-2.5" style="border-top: 1px solid var(--border-subtle); padding-top: 0.75rem;">
+        <div :class="sidebarCollapsed ? 'px-1.5 pb-2.5' : 'px-2.5 pb-2.5'" style="border-top: 1px solid var(--border-subtle); padding-top: 0.75rem;">
           <UPopover v-model:open="showWorkingDirPopover" :ui="{ width: 'w-[280px]' }">
             <button
-              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-150 focus-ring cursor-pointer text-left press-scale"
+              class="w-full flex items-center rounded-lg transition-all duration-150 focus-ring cursor-pointer press-scale"
+              :class="sidebarCollapsed ? 'justify-center px-0 py-2' : 'gap-2 px-3 py-2 text-left'"
               style="color: var(--text-disabled); border: 1px solid var(--border-subtle);"
+              :title="sidebarCollapsed ? (workingDir || 'Set project directory') : undefined"
               @click="openWorkingDirPopover"
             >
               <UIcon name="i-lucide-folder" class="size-3.5 shrink-0" :style="{ color: workingDir ? 'var(--accent)' : undefined }" />
-              <div class="flex-1 min-w-0">
-                <div v-if="workingDir" class="font-mono text-[10px] truncate" style="color: var(--text-secondary);">
-                  {{ displayPath }}
+              <template v-if="!sidebarCollapsed">
+                <div class="flex-1 min-w-0">
+                  <div v-if="workingDir" class="font-mono text-[10px] truncate" style="color: var(--text-secondary);">
+                    {{ displayPath }}
+                  </div>
+                  <div v-else class="text-[11px]" style="font-family: var(--font-sans);">
+                    Set project directory
+                  </div>
                 </div>
-                <div v-else class="text-[11px]" style="font-family: var(--font-sans);">
-                  Set project directory
-                </div>
-              </div>
-              <UIcon name="i-lucide-pencil" class="size-3 shrink-0" style="color: var(--text-disabled);" />
+                <UIcon name="i-lucide-pencil" class="size-3 shrink-0" style="color: var(--text-disabled);" />
+              </template>
             </button>
             <template #content>
               <div class="p-3 space-y-3">
@@ -380,7 +420,7 @@ function badgeFor(to: string) {
               </div>
             </template>
           </UPopover>
-          <div class="font-mono text-[9px] truncate tracking-wide mt-1.5 px-1" style="color: var(--text-disabled);">
+          <div v-if="!sidebarCollapsed" class="font-mono text-[9px] truncate tracking-wide mt-1.5 px-1" style="color: var(--text-disabled);">
             {{ claudeDir || 'No config directory' }}
           </div>
         </div>

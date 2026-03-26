@@ -5,15 +5,18 @@ import { formatContent } from '~/utils/messageFormatting'
 
 const props = defineProps<{
   message: DisplayChatMessage
+  showTimestamp?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'permissionRespond', permissionId: string, decision: 'allow' | 'deny', remember?: boolean): void
+  (e: 'openFile', filePath: string): void
 }>()
 
 // Collapsible states
 const showThinking = ref(false)
 const showToolDetails = ref(false)
+const copied = ref(false)
 
 // Format and render content
 const renderedContent = computed(() => {
@@ -21,6 +24,47 @@ const renderedContent = computed(() => {
   const formatted = formatContent(props.message.content)
   return renderMarkdownWithMath(formatted)
 })
+
+// Extract filename from tool input
+const toolFileName = computed(() => {
+  if (!props.message.toolInput) return null
+
+  // Common patterns for file paths in tool inputs
+  const input = props.message.toolInput
+  if (typeof input === 'string') return input
+  if (input.file_path) return input.file_path
+  if (input.path) return input.path
+  if (input.filePath) return input.filePath
+  if (input.filename) return input.filename
+
+  return null
+})
+
+// Get just the filename from full path
+const displayFileName = computed(() => {
+  if (!toolFileName.value) return null
+  const parts = toolFileName.value.split('/')
+  return parts[parts.length - 1]
+})
+
+// Copy message content
+async function copyContent() {
+  if (!props.message.content) return
+  try {
+    await navigator.clipboard.writeText(props.message.content)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  } catch (e) {
+    console.error('Failed to copy:', e)
+  }
+}
+
+// Handle file click
+function handleFileClick() {
+  if (toolFileName.value) {
+    emit('openFile', toolFileName.value)
+  }
+}
 
 // Handle permission response
 function handlePermissionAllow(remember = false) {
@@ -34,294 +78,525 @@ function handlePermissionDeny() {
     emit('permissionRespond', props.message.permissionRequest.id, 'deny', false)
   }
 }
+
+// Get tool icon based on tool name
+function getToolIcon(toolName: string): string {
+  const toolIcons: Record<string, string> = {
+    'Read': 'i-lucide-file-text',
+    'Write': 'i-lucide-file-plus',
+    'Edit': 'i-lucide-file-edit',
+    'Bash': 'i-lucide-terminal',
+    'Glob': 'i-lucide-search',
+    'Grep': 'i-lucide-search-code',
+    'WebFetch': 'i-lucide-globe',
+    'WebSearch': 'i-lucide-search',
+    'Task': 'i-lucide-list-todo',
+  }
+  return toolIcons[toolName] || 'i-lucide-wrench'
+}
+
+// Get tool color
+function getToolColor(toolName: string): string {
+  const toolColors: Record<string, string> = {
+    'Read': '#3b82f6',
+    'Write': '#22c55e',
+    'Edit': '#f59e0b',
+    'Bash': '#8b5cf6',
+    'Glob': '#06b6d4',
+    'Grep': '#06b6d4',
+    'TodoWrite': '#22c55e',
+  }
+  return toolColors[toolName] || 'var(--accent)'
+}
+
+// Check if this is a TodoWrite tool
+const isTodoWrite = computed(() => props.message.toolName === 'TodoWrite')
+
+// Check if this is a Bash tool
+const isBash = computed(() => props.message.toolName === 'Bash')
+
+// Get bash command and description
+const bashCommand = computed(() => {
+  if (!isBash.value || !props.message.toolInput) return null
+  const input = props.message.toolInput
+  return input.command || null
+})
+
+const bashDescription = computed(() => {
+  if (!isBash.value || !props.message.toolInput) return null
+  const input = props.message.toolInput
+  return input.description || null
+})
+
+// Parse todo items from TodoWrite input
+interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm?: string
+}
+
+const todoItems = computed<TodoItem[]>(() => {
+  if (!isTodoWrite.value || !props.message.toolInput) return []
+
+  const input = props.message.toolInput
+  if (input.todos && Array.isArray(input.todos)) {
+    return input.todos
+  }
+  return []
+})
+
+// Get status icon for todo item
+function getTodoStatusIcon(status: string): string {
+  switch (status) {
+    case 'completed': return 'i-lucide-check-circle-2'
+    case 'in_progress': return 'i-lucide-clock'
+    default: return 'i-lucide-circle'
+  }
+}
+
+// Get status color for todo item
+function getTodoStatusColor(status: string): string {
+  switch (status) {
+    case 'completed': return '#22c55e'
+    case 'in_progress': return '#3b82f6'
+    default: return 'var(--text-tertiary)'
+  }
+}
+
+// Get status badge style
+function getTodoStatusBadge(status: string): { bg: string; color: string; label: string } {
+  switch (status) {
+    case 'completed':
+      return { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', label: 'completed' }
+    case 'in_progress':
+      return { bg: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', label: 'in progress' }
+    default:
+      return { bg: 'var(--surface-raised)', color: 'var(--text-tertiary)', label: 'pending' }
+  }
+}
 </script>
 
 <template>
-  <div
-    class="flex items-start gap-3"
-    :class="{
-      'flex-row-reverse': message.role === 'user',
-    }"
-  >
-    <div
-      class="flex-1 flex flex-col"
-      :class="{
-        'items-end': message.role === 'user',
-        'items-start': message.role !== 'user',
-      }"
-    >
-      <!-- User Message -->
-      <template v-if="message.role === 'user'">
-        <div
-          class="px-4 py-2 rounded-lg max-w-[85%]"
-          style="background: var(--accent); color: white;"
-        >
-          <div class="text-[13px] whitespace-pre-wrap">{{ message.content }}</div>
-        </div>
-      </template>
+  <div class="message-item overflow-hidden">
+    <!-- User Message - shouldn't appear here since handled by parent, but just in case -->
+    <template v-if="message.role === 'user'">
+      <div class="text-[13px] whitespace-pre-wrap" style="color: var(--text-primary);">
+        {{ message.content }}
+      </div>
+    </template>
 
-      <!-- Assistant Text Message -->
-      <template v-else-if="message.kind === 'text'">
+    <!-- Assistant Text Message -->
+    <template v-else-if="message.kind === 'text' && message.content">
+      <div class="group relative">
         <div
-          class="px-4 py-2 rounded-lg max-w-[85%]"
+          class="prose prose-sm max-w-none text-[13px] leading-relaxed"
+          style="color: var(--text-primary);"
+          v-html="renderedContent"
+        />
+
+        <!-- Streaming cursor -->
+        <span
+          v-if="message.isStreaming"
+          class="inline-block w-0.5 h-4 ml-0.5 animate-pulse rounded-full"
+          style="background: var(--accent);"
+        />
+
+        <!-- Copy button - appears on hover -->
+        <button
+          v-if="message.content && !message.isStreaming"
+          class="absolute -top-1 right-0 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
           style="background: var(--surface-raised);"
+          title="Copy to clipboard"
+          @click="copyContent"
         >
-          <div
-            class="prose prose-sm max-w-none text-[13px]"
-            style="color: var(--text-primary);"
-            v-html="renderedContent"
+          <UIcon
+            :name="copied ? 'i-lucide-check' : 'i-lucide-copy'"
+            class="size-3.5"
+            :style="{ color: copied ? '#22c55e' : 'var(--text-tertiary)' }"
           />
-          <!-- Streaming cursor -->
-          <span
-            v-if="message.isStreaming"
-            class="inline-block w-2 h-4 ml-1 animate-pulse"
-            style="background: var(--accent);"
-          />
-        </div>
-      </template>
+        </button>
+      </div>
+    </template>
 
-      <!-- Thinking Block -->
-      <template v-else-if="message.kind === 'thinking'">
+    <!-- Thinking Block - Compact inline style -->
+    <template v-else-if="message.kind === 'thinking'">
+      <button
+        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] transition-all"
+        style="background: var(--surface-raised); color: var(--text-secondary);"
+        @click="showThinking = !showThinking"
+      >
+        <UIcon
+          :name="showThinking ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="size-3"
+        />
+        <UIcon name="i-lucide-sparkles" class="size-3" style="color: #8b5cf6;" />
+        <span>Thinking...</span>
+      </button>
+
+      <div
+        v-if="showThinking"
+        class="mt-2 p-3 rounded-lg text-[12px] whitespace-pre-wrap"
+        style="background: var(--surface-raised); color: var(--text-tertiary); border-left: 2px solid #8b5cf6;"
+      >
+        {{ message.thinking || message.content }}
+      </div>
+    </template>
+
+    <!-- Bash - Terminal style command display -->
+    <template v-else-if="message.kind === 'tool_use' && isBash && bashCommand">
+      <div class="space-y-1">
+        <!-- Terminal box -->
         <div
-          class="px-4 py-2 rounded-lg max-w-[85%] border"
-          style="background: var(--surface); border-color: var(--border-subtle);"
+          class="relative rounded-lg overflow-hidden"
+          style="background: #1a1b26;"
         >
-          <button
-            class="flex items-center gap-2 text-[12px] font-medium w-full"
-            style="color: var(--text-secondary);"
-            @click="showThinking = !showThinking"
-          >
-            <UIcon
-              :name="showThinking ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-              class="size-3"
-            />
-            <UIcon name="i-lucide-brain" class="size-3" />
-            Thinking...
-          </button>
+          <!-- Terminal icon -->
           <div
-            v-if="showThinking"
-            class="mt-2 pt-2 border-t text-[12px] whitespace-pre-wrap"
-            style="border-color: var(--border-subtle); color: var(--text-tertiary);"
+            class="absolute top-2 left-2 size-4 rounded flex items-center justify-center"
+            style="background: #3b82f6;"
           >
-            {{ message.thinking || message.content }}
+            <UIcon name="i-lucide-terminal" class="size-2.5" style="color: white;" />
+          </div>
+
+          <!-- Command -->
+          <div class="px-4 py-3 pl-9 font-mono text-[12px]" style="color: #9ece6a;">
+            <span style="color: #7aa2f7;">$</span> {{ bashCommand }}
           </div>
         </div>
-      </template>
 
-      <!-- Tool Use -->
-      <template v-else-if="message.kind === 'tool_use'">
-        <div
-          class="px-4 py-2 rounded-lg max-w-[85%] border"
-          style="background: var(--surface); border-color: var(--border-subtle);"
+        <!-- Description -->
+        <p v-if="bashDescription" class="text-[11px] px-1 italic" style="color: var(--text-tertiary);">
+          {{ bashDescription }}
+        </p>
+
+        <!-- Expandable output (if there's a result) -->
+        <button
+          v-if="message.toolResult"
+          class="inline-flex items-center gap-1.5 text-[11px] px-1"
+          style="color: var(--text-tertiary);"
+          @click="showToolDetails = !showToolDetails"
         >
+          <UIcon
+            :name="showToolDetails ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+            class="size-3"
+          />
+          <span>{{ showToolDetails ? 'Hide output' : 'Show output' }}</span>
+        </button>
+
+        <!-- Output -->
+        <div
+          v-if="showToolDetails && message.toolResult"
+          class="rounded-lg overflow-auto max-h-48 font-mono text-[11px] p-3"
+          style="background: #1a1b26; color: #a9b1d6;"
+        >
+          <pre class="whitespace-pre-wrap">{{ typeof message.toolResult === 'string' ? message.toolResult : JSON.stringify(message.toolResult, null, 2) }}</pre>
+        </div>
+      </div>
+    </template>
+
+    <!-- TodoWrite - Collapsible formatted todo list -->
+    <template v-else-if="message.kind === 'tool_use' && isTodoWrite && todoItems.length > 0">
+      <div class="flex items-start gap-2">
+        <!-- Left border indicator -->
+        <div
+          class="w-0.5 self-stretch rounded-full shrink-0"
+          style="background: #22c55e;"
+        />
+
+        <div class="flex-1 min-w-0">
+          <!-- Header (clickable to expand/collapse) -->
           <button
-            class="flex items-center gap-2 text-[12px] font-medium w-full"
-            style="color: var(--text-primary);"
+            class="inline-flex items-center gap-1.5 text-[12px] font-medium"
+            style="color: var(--text-secondary);"
             @click="showToolDetails = !showToolDetails"
           >
             <UIcon
               :name="showToolDetails ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
               class="size-3"
             />
-            <UIcon name="i-lucide-wrench" class="size-3" style="color: var(--accent);" />
-            {{ message.toolName }}
+            <span>TodoWrite</span>
+            <span style="color: var(--text-tertiary);">/</span>
+            <span style="color: #22c55e;">Updating todo list</span>
+            <span class="text-[10px] ml-1" style="color: var(--text-tertiary);">
+              ({{ todoItems.length }} items)
+            </span>
+          </button>
+
+          <!-- Todo Items List (collapsible) -->
+          <div v-if="showToolDetails" class="mt-2 space-y-1">
+            <div
+              v-for="(todo, index) in todoItems"
+              :key="index"
+              class="flex items-center gap-2 px-3 py-2 rounded-lg"
+              style="background: var(--surface-raised);"
+            >
+              <!-- Status Icon -->
+              <UIcon
+                :name="getTodoStatusIcon(todo.status)"
+                class="size-4 shrink-0"
+                :style="{ color: getTodoStatusColor(todo.status) }"
+              />
+
+              <!-- Todo Content -->
+              <span
+                class="flex-1 text-[12px]"
+                :style="{
+                  color: todo.status === 'completed' ? 'var(--text-tertiary)' : 'var(--text-primary)',
+                  textDecoration: todo.status === 'completed' ? 'line-through' : 'none',
+                }"
+              >
+                {{ todo.content }}
+              </span>
+
+              <!-- Status Badge -->
+              <span
+                class="px-2 py-0.5 rounded text-[10px] font-medium"
+                :style="{
+                  background: getTodoStatusBadge(todo.status).bg,
+                  color: getTodoStatusBadge(todo.status).color,
+                }"
+              >
+                {{ getTodoStatusBadge(todo.status).label }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Tool Use - Compact inline style with clickable filename -->
+    <template v-else-if="message.kind === 'tool_use'">
+      <div class="flex items-start gap-2">
+        <!-- Left border indicator -->
+        <div
+          class="w-0.5 self-stretch rounded-full shrink-0"
+          :style="{ background: getToolColor(message.toolName || 'unknown') }"
+        />
+
+        <div class="flex-1 min-w-0">
+          <!-- Tool header with filename -->
+          <button
+            class="inline-flex items-center gap-1.5 text-[12px] font-medium"
+            style="color: var(--text-secondary);"
+            @click="showToolDetails = !showToolDetails"
+          >
+            <UIcon
+              :name="showToolDetails ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+              class="size-3"
+            />
+            <span>{{ message.toolName }}</span>
+
+            <!-- Clickable filename -->
+            <template v-if="displayFileName">
+              <span style="color: var(--text-tertiary);">/</span>
+              <span
+                class="font-medium cursor-pointer hover:underline"
+                :style="{ color: getToolColor(message.toolName || 'unknown') }"
+                @click.stop="handleFileClick"
+              >
+                {{ displayFileName }}
+              </span>
+            </template>
+
+            <!-- Error badge -->
             <span
               v-if="message.isError"
-              class="px-1.5 py-0.5 rounded text-[10px]"
-              style="background: rgba(205, 49, 49, 0.1); color: #cd3131;"
+              class="px-1.5 py-0.5 rounded text-[10px] ml-1"
+              style="background: rgba(239, 68, 68, 0.1); color: #ef4444;"
             >
               Error
             </span>
           </button>
 
-          <div v-if="showToolDetails" class="mt-2 pt-2 border-t space-y-2" style="border-color: var(--border-subtle);">
+          <!-- Expanded details -->
+          <div v-if="showToolDetails" class="mt-2 space-y-2">
             <!-- Input -->
             <div v-if="message.toolInput">
               <div class="text-[10px] font-medium mb-1" style="color: var(--text-tertiary);">Input</div>
-              <pre class="text-[11px] p-2 rounded overflow-auto max-h-32" style="background: var(--surface-base); color: var(--text-secondary);">{{ JSON.stringify(message.toolInput, null, 2) }}</pre>
+              <pre
+                class="text-[11px] p-2 rounded-lg overflow-auto max-h-32 font-mono"
+                style="background: var(--surface-base); color: var(--text-secondary);"
+              >{{ JSON.stringify(message.toolInput, null, 2) }}</pre>
             </div>
 
             <!-- Result -->
             <div v-if="message.toolResult">
               <div class="text-[10px] font-medium mb-1" style="color: var(--text-tertiary);">Result</div>
               <pre
-                class="text-[11px] p-2 rounded overflow-auto max-h-32"
+                class="text-[11px] p-2 rounded-lg overflow-auto max-h-32 font-mono"
                 :style="{
                   background: 'var(--surface-base)',
-                  color: message.isError ? '#cd3131' : 'var(--text-secondary)',
+                  color: message.isError ? '#ef4444' : 'var(--text-secondary)',
                 }"
               >{{ typeof message.toolResult === 'string' ? message.toolResult : JSON.stringify(message.toolResult, null, 2) }}</pre>
             </div>
           </div>
         </div>
-      </template>
-
-      <!-- Permission Request -->
-      <template v-else-if="message.kind === 'permission_request' && message.permissionRequest">
-        <div
-          class="px-4 py-3 rounded-lg max-w-[85%] border-2"
-          style="background: rgba(229, 169, 62, 0.05); border-color: var(--accent);"
-        >
-          <div class="flex items-center gap-2 mb-2">
-            <UIcon name="i-lucide-shield-question" class="size-4" style="color: var(--accent);" />
-            <span class="text-[12px] font-semibold" style="color: var(--text-primary);">
-              Permission Required
-            </span>
-          </div>
-
-          <p class="text-[12px] mb-3" style="color: var(--text-secondary);">
-            {{ message.permissionRequest.toolName }} wants to perform an action:
-          </p>
-
-          <pre
-            v-if="message.permissionRequest.toolInput"
-            class="text-[11px] p-2 rounded mb-3 overflow-auto max-h-24"
-            style="background: var(--surface-raised); color: var(--text-tertiary);"
-          >{{ JSON.stringify(message.permissionRequest.toolInput, null, 2) }}</pre>
-
-          <div class="flex items-center gap-2">
-            <button
-              class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all"
-              style="background: var(--accent); color: white;"
-              @click="handlePermissionAllow(false)"
-            >
-              Allow
-            </button>
-            <button
-              class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all"
-              style="background: var(--surface-raised); color: var(--text-secondary);"
-              @click="handlePermissionAllow(true)"
-            >
-              Allow & Remember
-            </button>
-            <button
-              class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all"
-              style="background: rgba(205, 49, 49, 0.1); color: #cd3131;"
-              @click="handlePermissionDeny"
-            >
-              Deny
-            </button>
-          </div>
-        </div>
-      </template>
-
-      <!-- Task Notification -->
-      <template v-else-if="message.kind === 'task_notification' && message.taskProgress">
-        <div
-          class="px-4 py-2 rounded-lg max-w-[85%] border"
-          style="background: var(--surface); border-color: var(--border-subtle);"
-        >
-          <div class="flex items-center gap-2">
-            <UIcon
-              :name="message.taskProgress.status === 'running' ? 'i-lucide-loader-2' : message.taskProgress.status === 'completed' ? 'i-lucide-check-circle' : message.taskProgress.status === 'failed' ? 'i-lucide-x-circle' : 'i-lucide-circle'"
-              class="size-4"
-              :class="{ 'animate-spin': message.taskProgress.status === 'running' }"
-              :style="{
-                color: message.taskProgress.status === 'completed' ? '#0dbc79' : message.taskProgress.status === 'failed' ? '#cd3131' : 'var(--accent)',
-              }"
-            />
-            <span class="text-[12px] font-medium" style="color: var(--text-primary);">
-              {{ message.taskProgress.label }}
-            </span>
-          </div>
-
-          <div
-            v-if="message.taskProgress.progress !== undefined"
-            class="mt-2 h-1.5 rounded-full overflow-hidden"
-            style="background: var(--surface-raised);"
-          >
-            <div
-              class="h-full rounded-full transition-all"
-              :style="{
-                width: `${message.taskProgress.progress}%`,
-                background: 'var(--accent)',
-              }"
-            />
-          </div>
-
-          <p
-            v-if="message.taskProgress.message"
-            class="mt-1 text-[11px]"
-            style="color: var(--text-tertiary);"
-          >
-            {{ message.taskProgress.message }}
-          </p>
-        </div>
-      </template>
-
-      <!-- Interactive Prompt -->
-      <template v-else-if="message.kind === 'interactive_prompt' && message.interactivePrompt">
-        <div
-          class="px-4 py-3 rounded-lg max-w-[85%] border"
-          style="background: var(--surface); border-color: var(--accent);"
-        >
-          <p class="text-[12px] font-medium mb-2" style="color: var(--text-primary);">
-            {{ message.interactivePrompt.question }}
-          </p>
-
-          <div v-if="message.interactivePrompt.options" class="space-y-1">
-            <button
-              v-for="option in message.interactivePrompt.options"
-              :key="option"
-              class="w-full px-3 py-1.5 rounded-lg text-[12px] text-left hover-bg transition-all"
-              style="background: var(--surface-raised); color: var(--text-secondary);"
-            >
-              {{ option }}
-            </button>
-          </div>
-
-          <div v-else>
-            <textarea
-              class="w-full px-3 py-2 rounded-lg text-[12px] resize-none"
-              :rows="message.interactivePrompt.multiline ? 3 : 1"
-              :placeholder="message.interactivePrompt.placeholder || 'Type your answer...'"
-              style="background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--border-subtle);"
-            />
-          </div>
-        </div>
-      </template>
-
-      <!-- Error Message -->
-      <template v-else-if="message.kind === 'error'">
-        <div
-          class="px-4 py-2 rounded-lg max-w-[85%]"
-          style="background: rgba(205, 49, 49, 0.1); color: #cd3131;"
-        >
-          <div class="flex items-center gap-2 text-[12px] font-medium">
-            <UIcon name="i-lucide-alert-circle" class="size-4" />
-            Error
-          </div>
-          <p class="mt-1 text-[12px]">{{ message.content }}</p>
-        </div>
-      </template>
-
-      <!-- Timestamp -->
-      <div class="text-[10px] mt-1 px-1" style="color: var(--text-tertiary);">
-        {{ new Date(message.timestamp).toLocaleTimeString() }}
       </div>
+    </template>
+
+    <!-- Permission Request -->
+    <template v-else-if="message.kind === 'permission_request' && message.permissionRequest">
+      <div
+        class="px-4 py-3 rounded-xl border-2"
+        style="background: rgba(229, 169, 62, 0.05); border-color: var(--accent);"
+      >
+        <div class="flex items-center gap-2 mb-2">
+          <UIcon name="i-lucide-shield-question" class="size-4" style="color: var(--accent);" />
+          <span class="text-[12px] font-semibold" style="color: var(--text-primary);">
+            Permission Required
+          </span>
+        </div>
+
+        <p class="text-[12px] mb-3" style="color: var(--text-secondary);">
+          {{ message.permissionRequest.toolName }} wants to perform an action:
+        </p>
+
+        <pre
+          v-if="message.permissionRequest.toolInput"
+          class="text-[11px] p-2 rounded-lg mb-3 overflow-auto max-h-24 font-mono"
+          style="background: var(--surface-raised); color: var(--text-tertiary);"
+        >{{ JSON.stringify(message.permissionRequest.toolInput, null, 2) }}</pre>
+
+        <div class="flex items-center gap-2">
+          <button
+            class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all hover:opacity-90"
+            style="background: var(--accent); color: white;"
+            @click="handlePermissionAllow(false)"
+          >
+            Allow
+          </button>
+          <button
+            class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all hover:opacity-90"
+            style="background: var(--surface-raised); color: var(--text-secondary);"
+            @click="handlePermissionAllow(true)"
+          >
+            Allow & Remember
+          </button>
+          <button
+            class="px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all hover:opacity-90"
+            style="background: rgba(239, 68, 68, 0.1); color: #ef4444;"
+            @click="handlePermissionDeny"
+          >
+            Deny
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Task Notification -->
+    <template v-else-if="message.kind === 'task_notification' && message.taskProgress">
+      <div class="flex items-center gap-2 py-1">
+        <UIcon
+          :name="message.taskProgress.status === 'running' ? 'i-lucide-loader-2' : message.taskProgress.status === 'completed' ? 'i-lucide-check-circle' : message.taskProgress.status === 'failed' ? 'i-lucide-x-circle' : 'i-lucide-circle'"
+          class="size-4"
+          :class="{ 'animate-spin': message.taskProgress.status === 'running' }"
+          :style="{
+            color: message.taskProgress.status === 'completed' ? '#22c55e' : message.taskProgress.status === 'failed' ? '#ef4444' : 'var(--accent)',
+          }"
+        />
+        <span class="text-[12px]" style="color: var(--text-secondary);">
+          {{ message.taskProgress.label }}
+        </span>
+
+        <div
+          v-if="message.taskProgress.progress !== undefined"
+          class="flex-1 h-1 rounded-full overflow-hidden max-w-[120px]"
+          style="background: var(--surface-raised);"
+        >
+          <div
+            class="h-full rounded-full transition-all"
+            :style="{
+              width: `${message.taskProgress.progress}%`,
+              background: 'var(--accent)',
+            }"
+          />
+        </div>
+      </div>
+    </template>
+
+    <!-- Interactive Prompt -->
+    <template v-else-if="message.kind === 'interactive_prompt' && message.interactivePrompt">
+      <div
+        class="px-4 py-3 rounded-xl border"
+        style="background: var(--surface); border-color: var(--accent);"
+      >
+        <p class="text-[12px] font-medium mb-2" style="color: var(--text-primary);">
+          {{ message.interactivePrompt.question }}
+        </p>
+
+        <div v-if="message.interactivePrompt.options" class="space-y-1">
+          <button
+            v-for="option in message.interactivePrompt.options"
+            :key="option"
+            class="w-full px-3 py-1.5 rounded-lg text-[12px] text-left hover:opacity-80 transition-all"
+            style="background: var(--surface-raised); color: var(--text-secondary);"
+          >
+            {{ option }}
+          </button>
+        </div>
+
+        <div v-else>
+          <textarea
+            class="w-full px-3 py-2 rounded-lg text-[12px] resize-none focus:outline-none"
+            :rows="message.interactivePrompt.multiline ? 3 : 1"
+            :placeholder="message.interactivePrompt.placeholder || 'Type your answer...'"
+            style="background: var(--surface-raised); color: var(--text-primary); border: 1px solid var(--border-subtle);"
+          />
+        </div>
+      </div>
+    </template>
+
+    <!-- Error Message -->
+    <template v-else-if="message.kind === 'error'">
+      <div
+        class="flex items-start gap-2 px-3 py-2 rounded-lg"
+        style="background: rgba(239, 68, 68, 0.1); color: #ef4444;"
+      >
+        <UIcon name="i-lucide-alert-circle" class="size-4 shrink-0 mt-0.5" />
+        <div class="text-[12px]">{{ message.content }}</div>
+      </div>
+    </template>
+
+    <!-- Timestamp (if shown) -->
+    <div
+      v-if="showTimestamp"
+      class="text-[10px] mt-1.5"
+      style="color: var(--text-tertiary);"
+    >
+      {{ new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
     </div>
   </div>
 </template>
 
 <style scoped>
+.message-item {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .prose :deep(pre) {
   background: var(--surface-base);
   border-radius: 0.5rem;
   padding: 0.75rem;
   overflow-x: auto;
   margin: 0.5rem 0;
+  max-width: 100%;
 }
 
 .prose :deep(code) {
   font-size: 0.85em;
-  background: var(--surface-base);
-  padding: 0.15em 0.3em;
+  background: var(--surface-raised);
+  padding: 0.15em 0.4em;
   border-radius: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  word-break: break-word;
 }
 
 .prose :deep(pre code) {
   background: none;
   padding: 0;
+  word-break: normal;
 }
 
 .prose :deep(p) {
@@ -344,4 +619,31 @@ function handlePermissionDeny() {
 .prose :deep(li) {
   margin: 0.25rem 0;
 }
+
+.prose :deep(a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.prose :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.prose :deep(blockquote) {
+  border-left: 3px solid var(--border-subtle);
+  padding-left: 1rem;
+  margin: 0.5rem 0;
+  color: var(--text-secondary);
+}
+
+.prose :deep(h1), .prose :deep(h2), .prose :deep(h3), .prose :deep(h4) {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.prose :deep(h1) { font-size: 1.25rem; }
+.prose :deep(h2) { font-size: 1.125rem; }
+.prose :deep(h3) { font-size: 1rem; }
 </style>

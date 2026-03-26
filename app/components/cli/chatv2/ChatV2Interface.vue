@@ -12,8 +12,7 @@ const props = defineProps<{
   }
 }>()
 
-const route = useRoute()
-const router = useRouter()
+// No URL routing - all navigation handled via internal state
 
 // Chat v2 handler with integrated streaming, permissions, and session store
 const {
@@ -51,6 +50,7 @@ const isLoadingSessions = ref(false)
 const inputText = ref('')
 const messagesContainerRef = ref<HTMLElement | null>(null)
 const sidebarCollapsed = ref(false)
+const isCreatingSession = ref(false)
 
 // View mode: 'live' (new chat) or 'history' (viewing Claude Code history)
 const viewMode = ref<'live' | 'history'>('live')
@@ -58,6 +58,10 @@ const viewMode = ref<'live' | 'history'>('live')
 // URL state for history sessions
 const urlProjectName = ref<string | null>(null)
 const urlSessionId = ref<string | null>(null)
+
+// Session info for header display
+const currentSessionSummary = ref<string>('')
+const currentProjectDisplayName = ref<string>('')
 
 // Permission mode selector
 const permissionModeOptions: { value: PermissionMode; label: string; description: string }[] = [
@@ -87,40 +91,23 @@ const displayMessages = computed<DisplayChatMessage[]>(() => {
 onMounted(async () => {
   connect()
   await fetchSessions()
-
-  // Check for Claude Code history session in URL query params
-  const projectFromUrl = route.query.project as string | undefined
-  const sessionFromUrl = route.query.session as string | undefined
-
-  if (projectFromUrl && sessionFromUrl) {
-    // Restore Claude Code history session from URL
-    urlProjectName.value = projectFromUrl
-    urlSessionId.value = sessionFromUrl
-    viewMode.value = 'history'
-    // The sidebar will handle loading the session via its props
-  } else {
-    // Load live session from URL if present
-    const sessionIdFromRoute = route.params.sessionId as string || route.query.session as string
-    if (sessionIdFromRoute && !projectFromUrl) {
-      await loadSession(sessionIdFromRoute)
-    }
-  }
 })
 
-// Handle Claude Code history session selection
-async function handleClaudeCodeSessionSelected(payload: { projectName: string; sessionId: string }) {
+// Handle Claude Code project selection (no URL navigation)
+function handleClaudeCodeProjectSelected(payload: { projectName: string; projectDisplayName: string }) {
+  urlProjectName.value = payload.projectName
+  urlSessionId.value = null
+  currentSessionSummary.value = ''
+  currentProjectDisplayName.value = payload.projectDisplayName
+}
+
+// Handle Claude Code history session selection (no URL navigation)
+async function handleClaudeCodeSessionSelected(payload: { projectName: string; sessionId: string; sessionSummary: string; projectDisplayName: string }) {
   viewMode.value = 'history'
   urlProjectName.value = payload.projectName
   urlSessionId.value = payload.sessionId
-
-  // Update URL with project and session
-  await router.replace({
-    path: '/cli',
-    query: {
-      project: payload.projectName,
-      session: payload.sessionId
-    }
-  })
+  currentSessionSummary.value = payload.sessionSummary
+  currentProjectDisplayName.value = payload.projectDisplayName
 
   // Load messages
   await fetchClaudeCodeMessages(payload.projectName, payload.sessionId, 100, 0)
@@ -131,48 +118,19 @@ function handleSelectionCleared() {
   viewMode.value = 'live'
   urlProjectName.value = null
   urlSessionId.value = null
-
-  // Clear URL query params
-  router.replace({ path: '/cli' })
+  currentSessionSummary.value = ''
+  currentProjectDisplayName.value = ''
 }
 
-// Handle new chat - switch to live mode
+// Handle new chat - switch to live mode without affecting sidebar
 function handleNewChat() {
   viewMode.value = 'live'
   urlProjectName.value = null
   urlSessionId.value = null
-
-  // Clear URL query params
-  router.replace({ path: '/cli' })
+  currentSessionSummary.value = ''
+  currentProjectDisplayName.value = ''
   createSession()
 }
-
-// Watch for route changes (handles browser back/forward)
-watch(
-  () => ({ project: route.query.project, session: route.query.session }),
-  async (newQuery) => {
-    const projectName = newQuery.project as string | undefined
-    const sessionId = newQuery.session as string | undefined
-
-    if (projectName && sessionId) {
-      // Navigating to a Claude Code history session
-      if (urlProjectName.value !== projectName || urlSessionId.value !== sessionId) {
-        viewMode.value = 'history'
-        urlProjectName.value = projectName
-        urlSessionId.value = sessionId
-        await fetchClaudeCodeMessages(projectName, sessionId, 100, 0)
-      }
-    } else if (!projectName && !sessionId) {
-      // Navigating away from history (back to live mode or projects)
-      if (viewMode.value === 'history') {
-        viewMode.value = 'live'
-        urlProjectName.value = null
-        urlSessionId.value = null
-      }
-    }
-  },
-  { deep: true }
-)
 
 // Auto-scroll on new messages
 watch([displayMessages, streamingText], () => {
@@ -211,6 +169,7 @@ async function loadSession(sessionId: string) {
 
 // Create new session
 async function createSession() {
+  isCreatingSession.value = true
   try {
     const data = await $fetch<any>('/api/chat-ws/sessions', {
       method: 'POST',
@@ -221,17 +180,21 @@ async function createSession() {
     })
 
     sessionStore.setActiveSession(data.id)
-    await router.push(`/cli/${data.id}`)
-    await fetchSessions()
+    // Don't navigate away - just set the session
+    // await router.push(`/cli/${data.id}`)
+    // Fetch sessions in background without blocking
+    fetchSessions()
   } catch (e) {
     console.error('[ChatV2] Failed to create session:', e)
+  } finally {
+    isCreatingSession.value = false
   }
 }
 
-// Select session
+// Select session (for live chat sessions, not history)
 async function selectSession(sessionId: string | null) {
   if (sessionId) {
-    await router.push(`/cli/${sessionId}`)
+    await loadSession(sessionId)
   } else {
     await createSession()
   }
@@ -257,6 +220,36 @@ function handleSendMessage() {
 async function handlePermissionResponse(permissionId: string, decision: 'allow' | 'deny', remember = false) {
   respondToPermission(permissionId, decision, remember)
 }
+
+// Handle session renamed
+async function handleSessionRenamed(payload: { projectName: string; sessionId: string; newName: string }) {
+  console.log('[ChatV2] Session renamed:', payload)
+  // TODO: Implement API call to rename session
+  // For now, just log the event
+}
+
+// Handle session deleted
+async function handleSessionDeleted(payload: { projectName: string; sessionId: string }) {
+  console.log('[ChatV2] Session deleted:', payload)
+  // TODO: Implement API call to delete session
+  // If the deleted session is currently selected, clear selection
+  if (urlSessionId.value === payload.sessionId) {
+    handleSelectionCleared()
+  }
+}
+
+// Handle file open (from tool use clicks)
+function handleOpenFile(filePath: string) {
+  console.log('[ChatV2] Open file:', filePath)
+  // TODO: Could open in VS Code or another editor
+  // For now, we can use the window.open with vscode:// protocol
+  // or emit an event for parent handling
+  if (filePath) {
+    // Try to open in VS Code using the vscode:// protocol
+    const vscodeUrl = `vscode://file${filePath}`
+    window.open(vscodeUrl, '_blank')
+  }
+}
 </script>
 
 <template>
@@ -273,68 +266,76 @@ async function handlePermissionResponse(permissionId: string, decision: 'allow' 
       <!-- Projects Sidebar -->
       <ChatV2ProjectsSidebar
         :collapsed="sidebarCollapsed"
-        :current-session-id="selectedClaudeCodeSession?.id || urlSessionId"
-        :initial-project-name="urlProjectName"
-        :initial-session-id="urlSessionId"
+        :current-session-id="urlSessionId"
+        :is-loading-messages="isLoadingClaudeCodeMessages"
+        @project-selected="handleClaudeCodeProjectSelected"
         @session-selected="handleClaudeCodeSessionSelected"
         @new-chat="handleNewChat"
         @selection-cleared="handleSelectionCleared"
         @toggle-collapse="sidebarCollapsed = !sidebarCollapsed"
+        @session-renamed="handleSessionRenamed"
+        @session-deleted="handleSessionDeleted"
       />
     </div>
 
     <!-- Right Panel - Chat Interface -->
     <div class="flex-1 flex flex-col min-h-0">
-      <!-- Header -->
-      <div class="shrink-0 flex items-center justify-between px-4 py-2 border-b" style="border-color: var(--border-subtle);">
-        <div class="flex items-center gap-2">
-          <!-- History Mode Indicator -->
+      <!-- Header - Fixed height for consistent alignment -->
+      <div class="shrink-0 flex items-center justify-between px-4 h-14 border-b" style="border-color: var(--border-subtle);">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <!-- History Mode - Session Info -->
           <template v-if="viewMode === 'history'">
-            <div
-              class="flex items-center gap-2 px-2 py-1 rounded text-[11px] font-medium"
-              style="background: rgba(136, 71, 255, 0.1); color: #8847ff;"
-            >
-              <UIcon name="i-lucide-history" class="size-3" />
-              Viewing History
+            <div class="flex flex-col justify-center min-w-0 py-1.5">
+              <!-- Session Name -->
+              <span class="text-[12px] font-medium truncate max-w-[500px] leading-tight" style="color: var(--text-primary);">
+                {{ currentSessionSummary || 'Session' }}
+              </span>
+              <!-- Folder Name -->
+              <span
+                v-if="currentProjectDisplayName"
+                class="text-[10px] font-mono truncate leading-tight mt-0.5"
+                style="color: var(--text-tertiary);"
+              >
+                {{ currentProjectDisplayName }}
+              </span>
             </div>
-            <span class="text-[11px]" style="color: var(--text-secondary);">
-              {{ selectedClaudeCodeSession?.summary?.slice(0, 40) }}{{ (selectedClaudeCodeSession?.summary?.length || 0) > 40 ? '...' : '' }}
-            </span>
           </template>
 
           <!-- Live Mode Indicators -->
           <template v-else>
-            <!-- Connection Status -->
-            <div
-              v-if="isConnected"
-              class="flex items-center gap-2 px-2 py-1 rounded text-[11px] font-medium"
-              style="background: rgba(13, 188, 121, 0.1); color: #0dbc79;"
-            >
-              <div class="size-1.5 rounded-full animate-pulse" style="background: #0dbc79;" />
-              Connected
-            </div>
-            <div
-              v-else
-              class="flex items-center gap-2 px-2 py-1 rounded text-[11px] font-medium"
-              style="background: var(--surface-raised); color: var(--text-disabled);"
-            >
-              <div class="size-1.5 rounded-full" style="background: var(--text-disabled);" />
-              Disconnected
-            </div>
+            <div class="flex items-center gap-2">
+              <!-- Connection Status -->
+              <div
+                v-if="isConnected"
+                class="flex items-center gap-2 px-2 py-1 rounded text-[11px] font-medium"
+                style="background: rgba(13, 188, 121, 0.1); color: #0dbc79;"
+              >
+                <div class="size-1.5 rounded-full animate-pulse" style="background: #0dbc79;" />
+                Connected
+              </div>
+              <div
+                v-else
+                class="flex items-center gap-2 px-2 py-1 rounded text-[11px] font-medium"
+                style="background: var(--surface-raised); color: var(--text-disabled);"
+              >
+                <div class="size-1.5 rounded-full" style="background: var(--text-disabled);" />
+                Disconnected
+              </div>
 
-            <!-- Streaming indicator -->
-            <div
-              v-if="isStreaming"
-              class="flex items-center gap-2 px-2 py-1 rounded text-[11px] font-medium"
-              style="background: rgba(229, 169, 62, 0.1); color: var(--accent);"
-            >
-              <UIcon name="i-lucide-loader-2" class="size-3 animate-spin" />
-              Generating...
+              <!-- Streaming indicator -->
+              <div
+                v-if="isStreaming"
+                class="flex items-center gap-2 px-2 py-1 rounded text-[11px] font-medium"
+                style="background: rgba(229, 169, 62, 0.1); color: var(--accent);"
+              >
+                <UIcon name="i-lucide-loader-2" class="size-3 animate-spin" />
+                Generating...
+              </div>
             </div>
           </template>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 shrink-0">
           <!-- Permission Mode Selector (only in live mode) -->
           <ChatV2PermissionModeSelector
             v-if="viewMode === 'live'"
@@ -372,8 +373,16 @@ async function handlePermissionResponse(permissionId: string, decision: 'allow' 
         class="flex-1 overflow-y-auto p-4 space-y-4"
         style="background: var(--surface-base);"
       >
-        <!-- Loading state for history -->
-        <div v-if="viewMode === 'history' && isLoadingClaudeCodeMessages && displayMessages.length === 0" class="flex items-center justify-center h-full">
+        <!-- Loading state for creating new session -->
+        <div v-if="isCreatingSession" class="flex items-center justify-center h-full">
+          <div class="text-center">
+            <UIcon name="i-lucide-loader-2" class="size-8 animate-spin mb-3" style="color: var(--accent);" />
+            <p class="text-[13px]" style="color: var(--text-secondary);">Creating new chat...</p>
+          </div>
+        </div>
+
+        <!-- Loading state for history (always show when loading, hide old messages) -->
+        <div v-else-if="viewMode === 'history' && isLoadingClaudeCodeMessages" class="flex items-center justify-center h-full">
           <div class="text-center">
             <UIcon name="i-lucide-loader-2" class="size-8 animate-spin mb-3" style="color: var(--text-secondary);" />
             <p class="text-[13px]" style="color: var(--text-secondary);">Loading history...</p>
@@ -401,6 +410,7 @@ async function handlePermissionResponse(permissionId: string, decision: 'allow' 
           :messages="displayMessages"
           :is-streaming="isStreaming"
           @permission-respond="handlePermissionResponse"
+          @open-file="handleOpenFile"
         />
       </div>
 

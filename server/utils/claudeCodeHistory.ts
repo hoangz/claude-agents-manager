@@ -263,7 +263,7 @@ async function parseJsonlSessions(filePath: string): Promise<{
                 id: entry.sessionId,
                 summary: 'New Session',
                 messageCount: 0,
-                lastActivity: new Date().toISOString(),
+                lastActivity: entry.timestamp || new Date(0).toISOString(),
                 cwd: entry.cwd || ''
               })
             }
@@ -278,6 +278,26 @@ async function parseJsonlSessions(filePath: string): Promise<{
             // Update summary from summary entries
             if (entry.type === 'summary' && (entry as any).summary) {
               session.summary = (entry as any).summary
+            }
+
+            // Use first user message as summary if still "New Session"
+            if (session.summary === 'New Session' && entry.message?.role === 'user') {
+              const content = entry.message.content
+              let textContent = ''
+              if (typeof content === 'string') {
+                textContent = content
+              } else if (Array.isArray(content)) {
+                // Extract text from content array
+                const textPart = content.find(c => c.type === 'text' && c.text)
+                textContent = textPart?.text || ''
+              }
+              if (textContent) {
+                // Truncate to reasonable length for display
+                session.summary = textContent.slice(0, 100).trim()
+                if (textContent.length > 100) {
+                  session.summary += '...'
+                }
+              }
             }
 
             // Count messages and track activity
