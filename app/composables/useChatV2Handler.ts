@@ -152,34 +152,62 @@ export function useChatV2Handler() {
 
     switch (message.kind) {
       case 'session_created':
-        currentSessionId.value = message.newSessionId || message.content || null
+        const newSessionId = message.newSessionId || message.content || null
+
+        // Migrate messages from temporary session to real session
+        // Temp sessions are created on the client and named 'new-session-{timestamp}'
+        if (newSessionId && currentSessionId.value && currentSessionId.value.startsWith('new-session-')) {
+          sessionStore.migrateSession(currentSessionId.value, newSessionId)
+        }
+
+        // Update streaming buffer's session ID (for session migration)
+        if (newSessionId && streamingBuffer.isStreaming.value) {
+          streamingBuffer.setSessionId(newSessionId)
+        }
+
+        currentSessionId.value = newSessionId
         sessionStore.setActiveSession(currentSessionId.value)
         break
 
       case 'stream_delta':
         streamingBuffer.handleStreamDelta(message)
-        // Also update session store for realtime display
-        if (sessionId) {
-          sessionStore.updateStreaming(sessionId, streamingBuffer.accumulatedText.value)
-        }
+        // Don't update store here - let the buffered accumulated text update via watch
         break
 
       case 'stream_end':
-        const finalText = streamingBuffer.handleStreamEnd(message)
-        // Finalize streaming in session store
-        if (sessionId) {
-          sessionStore.finalizeStreaming(sessionId)
-        }
+        // Don't reset streaming here - this is called for each content block
+        // (thinking, text, tool_use can each trigger stream_end)
+        // Just flush the buffer to ensure current content is saved
+        streamingBuffer.flush()
         break
 
       case 'text':
-      case 'tool_use':
       case 'tool_result':
-      case 'thinking':
         // Add to session store for display
         if (sessionId) {
           sessionStore.appendRealtime(sessionId, message)
         }
+        break
+
+      case 'tool_use':
+        // Use well-known ID for tool_use so multiple updates go to same message
+        if (sessionId) {
+          const toolUseId = `__tool_${message.metadata?.toolUseId || message.toolId || 'unknown'}`
+          sessionStore.appendRealtime(sessionId, {
+            ...message,
+            id: toolUseId,
+          })
+        }
+        break
+
+      case 'tool_input_delta' as any:
+        // Buffer tool input like we do for thinking
+        streamingBuffer.addToolInputDelta(message.content || '')
+        break
+
+      case 'thinking':
+        // Buffer thinking content like we do for stream_delta
+        streamingBuffer.addThinking(message.content || '')
         break
 
       case 'permission_request':
@@ -212,18 +240,33 @@ export function useChatV2Handler() {
         break
 
       case 'complete':
-        // Query complete
-        if (sessionId) {
-          sessionStore.setStatus(sessionId, 'idle')
-          sessionStore.appendRealtime(sessionId, message)
+        // Query complete - NOW we can finalize all streaming content
+        const completeSessionId = sessionId || currentSessionId.value
+        if (completeSessionId) {
+          // Finalize streaming text to permanent text message
+          sessionStore.finalizeStreaming(completeSessionId)
+          // Finalize thinking content
+          sessionStore.finalizeThinking(completeSessionId)
+          // Reset the streaming buffer
+          streamingBuffer.endStreaming()
+          // Update status
+          sessionStore.setStatus(completeSessionId, 'idle')
+          sessionStore.appendRealtime(completeSessionId, message)
         }
         break
 
       case 'error':
         error.value = message.content || 'An error occurred'
-        if (sessionId) {
-          sessionStore.setStatus(sessionId, 'error')
-          sessionStore.appendRealtime(sessionId, message)
+        const errorSessionId = sessionId || currentSessionId.value
+        if (errorSessionId) {
+          // Finalize any partial content before showing error
+          sessionStore.finalizeStreaming(errorSessionId)
+          sessionStore.finalizeThinking(errorSessionId)
+          // Reset the streaming buffer
+          streamingBuffer.endStreaming()
+          // Update status and add error message
+          sessionStore.setStatus(errorSessionId, 'error')
+          sessionStore.appendRealtime(errorSessionId, message)
         }
         break
 
@@ -251,10 +294,48 @@ export function useChatV2Handler() {
       images?: string[]
     } = {}
   ): boolean {
+    // Lazy connect: establish WebSocket connection if not connected
+    if (!ws.value || ws.value.readyState !== WebSocket.OPEN) {
+      connect()
+      // Queue the message to be sent once connected
+      const checkAndSend = () => {
+        if (ws.value && ws.value.readyState === WebSocket.OPEN) {
+          doSendChat(text, options)
+        } else if (ws.value && ws.value.readyState === WebSocket.CONNECTING) {
+          setTimeout(checkAndSend, 50)
+        } else {
+          error.value = 'Failed to connect to WebSocket'
+        }
+      }
+      setTimeout(checkAndSend, 50)
+      return true // Optimistically return true since we're connecting
+    }
+
+    return doSendChat(text, options)
+  }
+
+  /**
+   * Internal: Actually send the chat message
+   */
+  function doSendChat(
+    text: string,
+    options: {
+      sessionId?: string
+      agentSlug?: string
+      workingDir?: string
+      provider?: string
+      permissionMode?: PermissionMode
+      images?: string[]
+    } = {}
+  ): boolean {
+    // For new sessions, generate a temporary client-side session ID
+    // Format: new-session-{timestamp}. Will be replaced by server session ID on session_created event
+    const targetSessionId = options.sessionId || currentSessionId.value || `new-session-${Date.now()}`
+
     const message: ChatV2WebSocketMessage = {
       type: 'start',
       message: text,
-      sessionId: options.sessionId || currentSessionId.value || undefined,
+      sessionId: targetSessionId,
       agentSlug: options.agentSlug,
       workingDir: options.workingDir,
       provider: options.provider,
@@ -262,7 +343,24 @@ export function useChatV2Handler() {
       images: options.images,
     }
 
-    return sendMessage(message)
+    const sent = sendMessage(message)
+
+    // Set up session state for streaming response
+    if (sent) {
+      // Update current session ID if using new temp session
+      if (!currentSessionId.value) {
+        currentSessionId.value = targetSessionId
+      }
+      
+      // Set active session so store updates trigger reactivity
+      sessionStore.setActiveSession(targetSessionId)
+      
+      // Start streaming buffer - the first stream_delta will create the message
+      streamingBuffer.startStreaming(targetSessionId)
+      sessionStore.setStatus(targetSessionId, 'streaming')
+    }
+
+    return sent
   }
 
   /**
@@ -314,6 +412,27 @@ export function useChatV2Handler() {
   // Cleanup on unmount
   onUnmounted(() => {
     disconnect()
+  })
+
+  // Watch streaming buffer and update store (debounced via buffer's 100ms flush)
+  watch(streamingBuffer.accumulatedText, (newText) => {
+    if (streamingBuffer.isStreaming.value && streamingBuffer.currentSessionId.value && newText) {
+      sessionStore.updateStreaming(streamingBuffer.currentSessionId.value, newText)
+    }
+  })
+
+  // Watch thinking buffer and update store (debounced via buffer's 100ms flush)
+  watch(streamingBuffer.accumulatedThinking, (newThinking) => {
+    if (streamingBuffer.isStreaming.value && streamingBuffer.currentSessionId.value && newThinking) {
+      sessionStore.updateThinking(streamingBuffer.currentSessionId.value, newThinking)
+    }
+  })
+
+  // Watch tool input buffer and update store (debounced via buffer's 100ms flush)
+  watch(streamingBuffer.accumulatedToolInput, (newToolInput) => {
+    if (streamingBuffer.isStreaming.value && streamingBuffer.currentSessionId.value && newToolInput) {
+      sessionStore.updateToolUse(streamingBuffer.currentSessionId.value, newToolInput)
+    }
   })
 
   return {

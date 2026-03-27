@@ -1,6 +1,7 @@
 /**
  * Streaming buffer composable for Chat v2.
  * Implements 100ms debounced streaming updates for better performance.
+ * Handles both text streaming (stream_delta) and thinking accumulation (thinking).
  */
 
 import type { NormalizedMessage } from '~/types'
@@ -9,11 +10,23 @@ const DEBOUNCE_MS = 100
 const MAX_BUFFER_SIZE = 1000
 
 export function useStreamingBuffer() {
-  // Buffer for incoming stream deltas
+  // Buffer for incoming stream deltas (text)
   const buffer = ref<string[]>([])
 
   // Accumulated text (what gets displayed)
   const accumulatedText = ref('')
+
+  // Buffer for thinking content
+  const thinkingBuffer = ref<string[]>([])
+
+  // Accumulated thinking content
+  const accumulatedThinking = ref('')
+
+  // Buffer for tool input deltas
+  const toolInputBuffer = ref<string[]>([])
+
+  // Accumulated tool input
+  const accumulatedToolInput = ref('')
 
   // Flush timer
   let flushTimer: NodeJS.Timeout | null = null
@@ -31,6 +44,10 @@ export function useStreamingBuffer() {
     // Reset state
     buffer.value = []
     accumulatedText.value = ''
+    thinkingBuffer.value = []
+    accumulatedThinking.value = ''
+    toolInputBuffer.value = []
+    accumulatedToolInput.value = ''
     currentSessionId.value = sessionId
     isStreaming.value = true
 
@@ -39,6 +56,13 @@ export function useStreamingBuffer() {
       clearTimeout(flushTimer)
       flushTimer = null
     }
+  }
+
+  /**
+   * Update the session ID without resetting buffer (for session migration)
+   */
+  function setSessionId(sessionId: string) {
+    currentSessionId.value = sessionId
   }
 
   /**
@@ -67,6 +91,56 @@ export function useStreamingBuffer() {
   }
 
   /**
+   * Add thinking content to the thinking buffer.
+   * Will be flushed after DEBOUNCE_MS.
+   */
+  function addThinking(thinking: string) {
+    if (!isStreaming.value) return
+
+    // Add to thinking buffer
+    thinkingBuffer.value.push(thinking)
+
+    // Prevent buffer overflow
+    if (thinkingBuffer.value.length > MAX_BUFFER_SIZE) {
+      // Force flush
+      flush()
+      return
+    }
+
+    // Schedule flush with debounce
+    if (!flushTimer) {
+      flushTimer = setTimeout(() => {
+        flush()
+      }, DEBOUNCE_MS)
+    }
+  }
+
+  /**
+   * Add tool input delta to the tool input buffer.
+   * Will be flushed after DEBOUNCE_MS.
+   */
+  function addToolInputDelta(input: string) {
+    if (!isStreaming.value) return
+
+    // Add to tool input buffer
+    toolInputBuffer.value.push(input)
+
+    // Prevent buffer overflow
+    if (toolInputBuffer.value.length > MAX_BUFFER_SIZE) {
+      // Force flush
+      flush()
+      return
+    }
+
+    // Schedule flush with debounce
+    if (!flushTimer) {
+      flushTimer = setTimeout(() => {
+        flush()
+      }, DEBOUNCE_MS)
+    }
+  }
+
+  /**
    * Flush the buffer - combine all deltas and update accumulated text
    */
   function flush() {
@@ -75,14 +149,28 @@ export function useStreamingBuffer() {
       flushTimer = null
     }
 
-    if (buffer.value.length === 0) return
+    if (buffer.value.length === 0 && thinkingBuffer.value.length === 0 && toolInputBuffer.value.length === 0) return
 
-    // Combine buffer
-    const combined = buffer.value.join('')
-    buffer.value = []
+    // Combine text buffer
+    if (buffer.value.length > 0) {
+      const combined = buffer.value.join('')
+      buffer.value = []
+      accumulatedText.value += combined
+    }
 
-    // Update accumulated text
-    accumulatedText.value += combined
+    // Combine thinking buffer
+    if (thinkingBuffer.value.length > 0) {
+      const combined = thinkingBuffer.value.join('')
+      thinkingBuffer.value = []
+      accumulatedThinking.value += combined
+    }
+
+    // Combine tool input buffer
+    if (toolInputBuffer.value.length > 0) {
+      const combined = toolInputBuffer.value.join('')
+      toolInputBuffer.value = []
+      accumulatedToolInput.value += combined
+    }
   }
 
   /**
@@ -95,11 +183,15 @@ export function useStreamingBuffer() {
 
     // Capture final text
     const finalText = accumulatedText.value
+    const finalThinking = accumulatedThinking.value
+    const finalToolInput = accumulatedToolInput.value
 
     // Reset state
     isStreaming.value = false
     currentSessionId.value = null
     accumulatedText.value = ''
+    accumulatedThinking.value = ''
+    accumulatedToolInput.value = ''
 
     return finalText
   }
@@ -115,10 +207,17 @@ export function useStreamingBuffer() {
       startStreaming(message.sessionId)
     }
 
-    // Check session match
-    if (currentSessionId.value && message.sessionId !== currentSessionId.value) {
+    // Check session match - but allow 'pending' to accept any session
+    // This handles the case where session_created arrives after first delta
+    const isPending = currentSessionId.value === 'pending'
+    if (!isPending && currentSessionId.value && message.sessionId !== currentSessionId.value) {
       console.warn('[StreamingBuffer] Session mismatch, ignoring delta')
       return
+    }
+
+    // If we're pending and get a real session ID, update it
+    if (isPending && message.sessionId && message.sessionId !== 'pending') {
+      setSessionId(message.sessionId)
     }
 
     // Add delta content
@@ -153,6 +252,10 @@ export function useStreamingBuffer() {
 
     buffer.value = []
     accumulatedText.value = ''
+    thinkingBuffer.value = []
+    accumulatedThinking.value = ''
+    toolInputBuffer.value = []
+    accumulatedToolInput.value = ''
     currentSessionId.value = null
     isStreaming.value = false
   }
@@ -166,11 +269,16 @@ export function useStreamingBuffer() {
     // State
     isStreaming: readonly(isStreaming),
     accumulatedText: readonly(accumulatedText),
+    accumulatedThinking: readonly(accumulatedThinking),
+    accumulatedToolInput: readonly(accumulatedToolInput),
     currentSessionId: readonly(currentSessionId),
 
     // Actions
     startStreaming,
+    setSessionId,
     addDelta,
+    addThinking,
+    addToolInputDelta,
     flush,
     endStreaming,
     handleStreamDelta,

@@ -36,11 +36,13 @@ export default defineWebSocketHandler({
             return
           }
 
-          // Create user message first
+          // Create user message for immediate display
+          // Note: We don't save the user message here - the provider will save it
+          // with the correct sessionId (SDK's session_id for new sessions)
           const userMessage: NormalizedMessage = {
             kind: 'text',
             id: `user-${Date.now()}`,
-            sessionId: msg.sessionId || peer.id,
+            sessionId: msg.sessionId || 'pending', // Will be updated by session_created event
             timestamp: new Date().toISOString(),
             role: 'user',
             content: msg.message,
@@ -53,12 +55,8 @@ export default defineWebSocketHandler({
             },
           }
 
-          // Save user message
-          if (msg.sessionId) {
-            await saveMessageToSession(msg.sessionId, userMessage)
-          }
-
           // Send user message back to client for immediate display
+          // The client will update the sessionId when it receives session_created
           peer.send(JSON.stringify(userMessage))
 
           // Load agent instructions if agent specified
@@ -70,7 +68,7 @@ export default defineWebSocketHandler({
             }
           }
 
-          // Query provider
+          // Query provider - provider will handle saving all messages with correct sessionId
           await provider.query(
             msg.message,
             {
@@ -80,6 +78,8 @@ export default defineWebSocketHandler({
               workingDir: msg.workingDir,
               permissionMode: msg.permissionMode,
               images: msg.images,
+              // Pass user message for provider to save with correct sessionId
+              userMessage,
             },
             peer
           )

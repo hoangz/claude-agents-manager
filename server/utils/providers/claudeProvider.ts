@@ -7,7 +7,7 @@ import type { ProviderAdapter, ProviderQueryOptions, ProviderInfo } from './type
 import { normalizeSDKMessage } from '../messageNormalizer'
 import { resolveClaudePath } from '../claudeDir'
 import { parseFrontmatter } from '../frontmatter'
-import { saveMessageToSession, getSessionMessages, getSessionMessagesCount } from '../chatSessionStorage'
+import { saveMessageToSession, getSessionMessages, getSessionMessagesCount, hasAssistantMessages } from '../chatSessionStorage'
 
 // Store active query instances for interruption
 interface QueryInstance {
@@ -36,15 +36,42 @@ function mapPermissionMode(mode?: string): string {
 /**
  * Claude provider adapter implementation.
  * Wraps the Claude Agent SDK for multi-provider support.
+ *
+ * Session Management:
+ * - For NEW sessions: Don't use resume, let SDK create session_id
+ * - For EXISTING sessions: Use resume with the SDK's session_id
+ * - The SDK's session_id is returned to frontend via session_created event
+ * - Frontend should store and use the SDK's session_id for subsequent queries
  */
 export const claudeProvider: ProviderAdapter = {
   name: 'claude',
 
   async query(prompt: string, options: ProviderQueryOptions, ws: Peer): Promise<void> {
-    let capturedSessionId = options.sessionId || null
+    // capturedSessionId will hold the SDK's session_id (either from resume or newly created)
+    let capturedSessionId: string | null = null
     let sessionCreatedSent = false
+    let userMessageSaved = false
     let accumulatedText = ''
     let hasTextMessageFromResult = false
+
+    // Check if this is a resume (session has prior SDK interaction)
+    // If sessionId is provided and has assistant messages, it's a valid SDK session
+    let shouldResume = false
+    if (options.sessionId) {
+      shouldResume = await hasAssistantMessages(options.sessionId)
+      if (shouldResume) {
+        capturedSessionId = options.sessionId
+        // For resumed sessions, save user message immediately
+        if (options.userMessage) {
+          const userMsgWithCorrectSession: NormalizedMessage = {
+            ...options.userMessage,
+            sessionId: capturedSessionId,
+          }
+          await saveMessageToSession(capturedSessionId, userMsgWithCorrectSession)
+          userMessageSaved = true
+        }
+      }
+    }
 
     try {
       // Prepare SDK options
@@ -70,9 +97,13 @@ export const claudeProvider: ProviderAdapter = {
         }
       }
 
-      // Resume session if ID provided
-      if (options.sessionId) {
+      // Resume session if this is an existing SDK session
+      // Only resume if the session has had prior SDK interaction (has assistant messages)
+      if (shouldResume && options.sessionId) {
         sdkOptions.resume = options.sessionId
+        console.log('[ClaudeProvider] Resuming SDK session:', options.sessionId)
+      } else {
+        console.log('[ClaudeProvider] Starting new SDK session')
       }
 
       // Add model if specified
@@ -81,7 +112,8 @@ export const claudeProvider: ProviderAdapter = {
       }
 
       console.log('[ClaudeProvider] Starting query with options:', {
-        hasSessionId: !!capturedSessionId,
+        hasSessionId: !!options.sessionId,
+        shouldResume,
         cwd: sdkOptions.cwd,
         model: sdkOptions.model,
         permissionMode: sdkOptions.permissionMode,
@@ -95,13 +127,16 @@ export const claudeProvider: ProviderAdapter = {
 
       // Stream responses
       for await (const message of queryInstance) {
-        // Capture session ID from SDK (for new sessions)
+        // Capture session ID from SDK
+        // For new sessions, SDK returns session_id in the first message
+        // For resumed sessions, we already have the session_id
         if (message.session_id && !capturedSessionId) {
           capturedSessionId = message.session_id
           activeQueries.set(capturedSessionId, queryInstance)
 
-          // Send session-created event only once for new sessions
-          if (!options.sessionId && !sessionCreatedSent) {
+          // Send session-created event for new sessions
+          // This tells the frontend what sessionId to use going forward
+          if (!shouldResume && !sessionCreatedSent) {
             sessionCreatedSent = true
             sendMessage(ws, {
               kind: 'session_created',
@@ -112,11 +147,24 @@ export const claudeProvider: ProviderAdapter = {
               newSessionId: capturedSessionId,
               provider: 'claude',
             })
+
+            // Save user message with SDK's session_id for new sessions
+            if (options.userMessage && !userMessageSaved) {
+              const userMsgWithCorrectSession: NormalizedMessage = {
+                ...options.userMessage,
+                sessionId: capturedSessionId,
+              }
+              await saveMessageToSession(capturedSessionId, userMsgWithCorrectSession)
+              userMessageSaved = true
+            }
           }
+        } else if (shouldResume && capturedSessionId && !activeQueries.has(capturedSessionId)) {
+          // For resumed sessions, register the query instance
+          activeQueries.set(capturedSessionId, queryInstance)
         }
 
         // Normalize SDK message
-        const normalized = normalizeSDKMessage(message, capturedSessionId || options.sessionId || 'unknown')
+        const normalized = normalizeSDKMessage(message, capturedSessionId || 'unknown')
 
         // Send all normalized messages
         for (const msg of normalized) {
@@ -162,7 +210,7 @@ export const claudeProvider: ProviderAdapter = {
       const completeMsg: NormalizedMessage = {
         kind: 'complete',
         id: randomUUID(),
-        sessionId: capturedSessionId || options.sessionId || 'unknown',
+        sessionId: capturedSessionId || 'unknown',
         timestamp: new Date().toISOString(),
         content: '',
         provider: 'claude',
@@ -181,7 +229,7 @@ export const claudeProvider: ProviderAdapter = {
       const errorMsg: NormalizedMessage = {
         kind: 'error',
         id: randomUUID(),
-        sessionId: capturedSessionId || options.sessionId || 'unknown',
+        sessionId: capturedSessionId || 'unknown',
         timestamp: new Date().toISOString(),
         content: error.message || 'An error occurred',
         provider: 'claude',

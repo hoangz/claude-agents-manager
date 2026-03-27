@@ -344,6 +344,77 @@ export function useSessionStore() {
   }
 
   /**
+   * Update or create a thinking message (accumulated thinking so far).
+   * Uses a well-known ID so subsequent calls replace the same message.
+   */
+  const updateThinking = (sessionId: string, thinkingContent: string) => {
+    const slot = getSlot(sessionId)
+    const thinkingId = `__thinking_${sessionId}`
+
+    const msg: NormalizedMessage = {
+      id: thinkingId,
+      sessionId,
+      timestamp: new Date().toISOString(),
+      kind: 'thinking',
+      content: thinkingContent,
+    }
+
+    const idx = slot.realtimeMessages.findIndex(m => m.id === thinkingId)
+    if (idx >= 0) {
+      slot.realtimeMessages = [...slot.realtimeMessages]
+      slot.realtimeMessages[idx] = msg
+    } else {
+      slot.realtimeMessages = [...slot.realtimeMessages, msg]
+    }
+
+    recomputeMergedIfNeeded(slot)
+    notify(sessionId)
+  }
+
+  /**
+   * Update or create a tool use message (accumulated tool input so far).
+   * Uses a well-known ID so subsequent calls replace the same message.
+   */
+  const updateToolUse = (sessionId: string, toolInput: string) => {
+    const slot = getSlot(sessionId)
+    // Find the most recent tool_use message to update
+    let toolUseIdx = -1
+    for (let i = slot.realtimeMessages.length - 1; i >= 0; i--) {
+      const msg = slot.realtimeMessages[i]
+      if (msg && msg.kind === 'tool_use' && msg.id?.startsWith('__tool_')) {
+        toolUseIdx = i
+        break
+      }
+    }
+
+    if (toolUseIdx >= 0) {
+      const existingToolUse = slot.realtimeMessages[toolUseIdx]
+      if (existingToolUse) {
+        // Try to parse JSON, but handle partial/incomplete JSON gracefully
+        let parsedInput: any = existingToolUse.toolInput || {}
+        if (toolInput) {
+          try {
+            parsedInput = JSON.parse(toolInput)
+          } catch {
+            // Partial JSON - store raw string for display with a marker
+            // The UI can detect _partialJson and display it appropriately
+            parsedInput = { _partialJson: toolInput }
+          }
+        }
+
+        const updatedToolUse = {
+          ...existingToolUse,
+          toolInput: parsedInput,
+        } as NormalizedMessage
+        slot.realtimeMessages = [...slot.realtimeMessages]
+        slot.realtimeMessages[toolUseIdx] = updatedToolUse
+        recomputeMergedIfNeeded(slot)
+        notify(sessionId)
+      }
+    }
+  }
+
+  /**
    * Finalize streaming: convert streaming message to regular text message.
    * The well-known streaming ID is replaced with a unique text message ID.
    */
@@ -373,6 +444,34 @@ export function useSessionStore() {
   }
 
   /**
+   * Finalize thinking: convert temporary thinking message to permanent one.
+   * The well-known thinking ID is replaced with a unique thinking message ID.
+   */
+  const finalizeThinking = (sessionId: string) => {
+    const slot = storeRef.value.get(sessionId)
+    if (!slot) return
+
+    const thinkingId = `__thinking_${sessionId}`
+    const idx = slot.realtimeMessages.findIndex(m => m.id === thinkingId)
+
+    if (idx >= 0) {
+      const thinking = slot.realtimeMessages[idx]
+      if (!thinking || !thinking.content) return
+
+      slot.realtimeMessages = [...slot.realtimeMessages]
+      slot.realtimeMessages[idx] = {
+        id: `thinking_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        kind: 'thinking',
+        sessionId: thinking.sessionId,
+        timestamp: thinking.timestamp,
+        content: thinking.content,
+      } as NormalizedMessage
+      recomputeMergedIfNeeded(slot)
+      notify(sessionId)
+    }
+  }
+
+  /**
    * Clear realtime messages for a session (after server catches up)
    */
   const clearRealtime = (sessionId: string) => {
@@ -382,6 +481,37 @@ export function useSessionStore() {
       recomputeMergedIfNeeded(slot)
       notify(sessionId)
     }
+  }
+
+  /**
+   * Migrate messages from one session to another (e.g., 'pending' -> new SDK session)
+   * Updates the sessionId field on each message.
+   */
+  const migrateSession = (fromSessionId: string, toSessionId: string) => {
+    const fromSlot = storeRef.value.get(fromSessionId)
+    if (!fromSlot) return
+
+    const toSlot = getSlot(toSessionId)
+
+    // Migrate realtime messages, updating their sessionId
+    const migratedMessages = fromSlot.realtimeMessages.map(msg => ({
+      ...msg,
+      sessionId: toSessionId,
+    }))
+
+    toSlot.realtimeMessages = [...toSlot.realtimeMessages, ...migratedMessages]
+    recomputeMergedIfNeeded(toSlot)
+
+    // Clear the old session
+    fromSlot.realtimeMessages = []
+    fromSlot.serverMessages = []
+    fromSlot.merged = []
+    recomputeMergedIfNeeded(fromSlot)
+
+    // Delete the old slot
+    storeRef.value.delete(fromSessionId)
+
+    notify(toSessionId)
   }
 
   /**
@@ -500,8 +630,12 @@ export function useSessionStore() {
     setStatus,
     isStale,
     updateStreaming,
+    updateThinking,
+    updateToolUse,
     finalizeStreaming,
+    finalizeThinking,
     clearRealtime,
+    migrateSession,
     getMessages,
     getSessionSlot,
     // Chat v2: Permission management

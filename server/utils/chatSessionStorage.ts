@@ -297,3 +297,38 @@ export async function getSessionMessagesCount(sessionId: string): Promise<number
     return 0
   }
 }
+
+/**
+ * Check if a session has any assistant messages
+ * This indicates the session has had prior SDK interaction and can be resumed
+ */
+export async function hasAssistantMessages(sessionId: string): Promise<boolean> {
+  const filePath = getSessionFilePath(sessionId)
+
+  if (!existsSync(filePath)) {
+    return false
+  }
+
+  try {
+    const content = await fs.readFile(filePath, 'utf-8')
+    const lines = content.trim().split('\n').filter(Boolean)
+
+    for (const line of lines) {
+      try {
+        const message = JSON.parse(line) as NormalizedMessage
+        // Check for assistant messages or tool results (indicates SDK has responded)
+        if (message.role === 'assistant' || message.kind === 'tool_result' || message.kind === 'text' && message.role === 'assistant') {
+          return true
+        }
+      } catch {
+        // Skip malformed lines
+        continue
+      }
+    }
+
+    return false
+  } catch (error) {
+    console.error(`Failed to check assistant messages for session ${sessionId}:`, error)
+    return false
+  }
+}

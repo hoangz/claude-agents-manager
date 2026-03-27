@@ -35,18 +35,43 @@ export function normalizeSDKMessage(
           timestamp,
           content: evt.delta.thinking,
         })
+      } else if (evt.delta?.type === 'input_json_delta' && evt.delta.partial_json) {
+        // Tool input being accumulated - send as separate message for buffering
+        messages.push({
+          kind: 'tool_input_delta',
+          id: randomUUID(),
+          sessionId,
+          timestamp,
+          content: evt.delta.partial_json,
+        } as any) // Cast because tool_input_delta is not in standard types
       }
     }
 
-    // Content block start (for thinking)
-    if (evt.type === 'content_block_start' && evt.content_block?.type === 'thinking') {
-      messages.push({
-        kind: 'thinking',
-        id: randomUUID(),
-        sessionId,
-        timestamp,
-        content: '',
-      })
+    // Content block start (for thinking and tool_use)
+    if (evt.type === 'content_block_start') {
+      if (evt.content_block?.type === 'thinking') {
+        messages.push({
+          kind: 'thinking',
+          id: randomUUID(),
+          sessionId,
+          timestamp,
+          content: '',
+        })
+      } else if (evt.content_block?.type === 'tool_use') {
+        // Start of tool use block - capture tool name and ID
+        messages.push({
+          kind: 'tool_use',
+          id: randomUUID(),
+          sessionId,
+          timestamp,
+          toolName: evt.content_block.name || 'tool',
+          toolId: evt.content_block.id,
+          toolInput: {},
+          metadata: {
+            toolUseId: evt.content_block.id,
+          },
+        })
+      }
     }
 
     // Stream end
@@ -60,7 +85,7 @@ export function normalizeSDKMessage(
     }
   }
 
-  // Handle tool progress
+  // Handle tool progress (Anthropic SDK tool execution)
   if (sdkMessage.type === 'tool_progress') {
     messages.push({
       kind: 'tool_use',
@@ -76,18 +101,29 @@ export function normalizeSDKMessage(
     })
   }
 
+  // Handle tool result (Anthropic SDK tool results)
+  if (sdkMessage.type === 'tool_result') {
+    messages.push({
+      kind: 'tool_result',
+      id: randomUUID(),
+      sessionId,
+      timestamp,
+      toolId: sdkMessage.tool_use_id,
+      content: sdkMessage.content || '',
+      isError: sdkMessage.is_error || false,
+    })
+  }
+
   // Handle result (final result with full content)
-  if (sdkMessage.type === 'result' || 'result' in sdkMessage) {
+  // Only check for explicit result type - don't use 'result' in sdkMessage as it's too broad
+  if (sdkMessage.type === 'result') {
     const resultText = sdkMessage.result || ''
+    // Don't create text message here - the streaming flow handles text display
+    // This result is used by claudeProvider for save logic only
+    // Mark that we received a result for tracking purposes
     if (resultText && !isInternalContent(resultText)) {
-      messages.push({
-        kind: 'text',
-        id: randomUUID(),
-        sessionId,
-        timestamp,
-        role: 'assistant',
-        content: resultText,
-      })
+      // Result text is available but we don't create a duplicate text message
+      // The accumulated stream_delta content will be finalized to text by the frontend
     }
 
     // Add stop reason as complete message

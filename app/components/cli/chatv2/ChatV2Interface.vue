@@ -7,7 +7,6 @@ import type { DisplayChatMessage, PermissionMode } from '~/types'
 
 const props = defineProps<{
   executionOptions: {
-    agentSlug?: string
     workingDir?: string
   }
 }>()
@@ -59,6 +58,10 @@ const viewMode = ref<'live' | 'history'>('live')
 // Track if we're continuing a history session (showing history + new messages)
 const isContinuingHistory = ref(false)
 
+// Track dismissed state for info bars
+const isDismissingContinuePrompt = ref(false)
+const isDismissingContinuingBar = ref(false)
+
 // Local loading state with minimum duration for smooth UX
 const isLoadingHistoryWithDelay = ref(false)
 
@@ -95,16 +98,17 @@ const displayMessages = computed<DisplayChatMessage[]>(() => {
     return convertClaudeCodeMessages(claudeCodeMessages.value)
   }
 
-  // Live session
-  if (!currentSessionId.value) return []
+  // Live session - only show messages from active session, no fallback to 'pending'
+  if (!currentSessionId.value) {
+    return []
+  }
 
   const messages = sessionStore.getMessages(currentSessionId.value)
   return convertToDisplayMessages(messages, streamingText.value)
 })
 
-// Connect on mount
+// Fetch sessions on mount (no automatic WebSocket connection - connect lazily when sending)
 onMounted(async () => {
-  connect()
   await fetchSessions()
 })
 
@@ -170,6 +174,8 @@ function handleSelectionCleared() {
 }
 
 // Handle new chat - switch to live mode without affecting sidebar
+// Note: We don't pre-create a session anymore. The SDK will create the session
+// when the first message is sent, and we'll get the session ID via session_created event.
 function handleNewChat() {
   viewMode.value = 'live'
   urlProjectName.value = null
@@ -177,7 +183,14 @@ function handleNewChat() {
   currentSessionSummary.value = ''
   currentProjectDisplayName.value = ''
   isContinuingHistory.value = false
-  createSession()
+  // Clear the current session so the user can start fresh
+  sessionStore.setActiveSession(null)
+}
+
+// Dismiss both info bars when either one is closed
+function dismissHistoryBars() {
+  isDismissingContinuePrompt.value = true
+  isDismissingContinuingBar.value = true
 }
 
 // Auto-scroll on new messages (when in live mode or continuing history)
@@ -275,7 +288,6 @@ async function createSession() {
     const data = await $fetch<any>('/api/chat-ws/sessions', {
       method: 'POST',
       body: {
-        agentSlug: props.executionOptions.agentSlug,
         workingDir: props.executionOptions.workingDir,
       },
     })
@@ -312,52 +324,27 @@ async function handleSendMessage() {
 
   // If in history mode, start continuing the session
   if (viewMode.value === 'history' && !isContinuingHistory.value) {
-    // Create a new session to continue the conversation
-    isCreatingSession.value = true
-    try {
-      const data = await $fetch<any>('/api/chat-ws/sessions', {
-        method: 'POST',
-        body: {
-          agentSlug: props.executionOptions.agentSlug,
-          workingDir: props.executionOptions.workingDir,
-          // Pass the history session ID for context (if backend supports resuming)
-          resumeSessionId: urlSessionId.value,
-        },
-      })
+    // For history continuation, we use the existing SDK session ID
+    isContinuingHistory.value = true
 
-      sessionStore.setActiveSession(data.id)
-      isContinuingHistory.value = true
+    // Send the message with the history session ID to resume that SDK session
+    const success = sendChat(inputText.value, {
+      sessionId: urlSessionId.value || undefined, // SDK session ID from history
+      workingDir: props.executionOptions.workingDir,
+      permissionMode: selectedPermissionMode.value,
+    })
 
-      // Now send the message with the new session
-      const success = sendChat(inputText.value, {
-        sessionId: data.id,
-        agentSlug: props.executionOptions.agentSlug,
-        workingDir: props.executionOptions.workingDir,
-        permissionMode: selectedPermissionMode.value,
-      })
-
-      if (success) {
-        inputText.value = ''
-      }
-    } catch (e: any) {
-      console.error('[ChatV2] Failed to create session for history continuation:', e)
-      toast.add({
-        title: 'Failed to continue conversation',
-        description: e.data?.message || e.message || 'Unknown error',
-        color: 'error',
-      })
-    } finally {
-      isCreatingSession.value = false
+    if (success) {
+      inputText.value = ''
     }
     return
   }
 
-  // Already continuing history or in live mode
-  if (!currentSessionId.value) return
-
+  // Live mode - send message
+  // sendChat() now generates temp session IDs (new-session-{timestamp}) for new sessions
+  // The backend will respond with session_created event containing the real session ID
   const success = sendChat(inputText.value, {
-    sessionId: currentSessionId.value,
-    agentSlug: props.executionOptions.agentSlug,
+    sessionId: currentSessionId.value || undefined, // Will generate temp ID if undefined
     workingDir: props.executionOptions.workingDir,
     permissionMode: selectedPermissionMode.value,
   })
@@ -538,10 +525,10 @@ function handleOpenFile(filePath: string) {
               <UIcon :name="viewMode === 'history' ? 'i-lucide-history' : 'i-lucide-message-circle'" class="size-8" style="color: var(--text-secondary);" />
             </div>
             <h2 class="text-[16px] font-semibold mb-2" style="color: var(--text-primary);">
-              {{ viewMode === 'history' ? 'No Messages Found' : (currentSessionId ? 'Start a Conversation' : 'Select a Session') }}
+              {{ viewMode === 'history' ? 'No Messages Found' : 'Start a Conversation' }}
             </h2>
             <p class="text-[13px]" style="color: var(--text-secondary);">
-              {{ viewMode === 'history' ? 'This session has no displayable messages.' : (currentSessionId ? 'Ask Claude anything. Chat v2 with enhanced permissions and streaming.' : 'Select a session from Claude Code history or click "New Chat" to start.') }}
+              {{ viewMode === 'history' ? 'This session has no displayable messages.' : 'Ask Claude anything. Your message will create a new session automatically.' }}
             </p>
           </div>
         </div>
@@ -581,7 +568,7 @@ function handleOpenFile(filePath: string) {
         <!-- History mode context indicator (floating, hidden when input is focused) -->
         <Transition name="slide-fade">
           <div
-            v-if="viewMode === 'history' && !isContinuingHistory && !isInputFocused"
+            v-if="viewMode === 'history' && !isContinuingHistory && !isInputFocused && !isDismissingContinuePrompt"
             class="absolute bottom-full left-0 right-0 px-3 py-1.5 flex items-center justify-between z-10"
             style="background: var(--surface-raised); border-top: 1px solid var(--border-subtle);"
           >
@@ -591,33 +578,54 @@ function handleOpenFile(filePath: string) {
                 Continue this conversation or start fresh
               </span>
             </div>
-            <button
-              class="px-2 py-0.5 rounded text-[10px] font-medium hover-bg transition-all"
-              style="background: var(--surface); color: var(--text-tertiary);"
-              @click="handleNewChat"
-            >
-              <UIcon name="i-lucide-plus" class="size-3 inline-block mr-0.5" />
-              New Chat
-            </button>
+            <div class="flex items-center gap-1 shrink-0">
+              <button
+                class="px-2 py-0.5 rounded text-[10px] font-medium hover-bg transition-all"
+                style="background: var(--surface); color: var(--text-tertiary);"
+                @click="handleNewChat"
+              >
+                <UIcon name="i-lucide-plus" class="size-3 inline-block mr-0.5" />
+                New Chat
+              </button>
+              <button
+                class="p-1 rounded hover-bg transition-all"
+                style="color: var(--text-tertiary);"
+                title="Dismiss"
+                @click="dismissHistoryBars"
+              >
+                <UIcon name="i-lucide-x" class="size-3" />
+              </button>
+            </div>
           </div>
         </Transition>
 
         <!-- Continuing history indicator (floating) -->
         <div
-          v-if="isContinuingHistory"
-          class="absolute bottom-full left-0 right-0 px-3 py-1 flex items-center gap-2 z-10"
+          v-if="isContinuingHistory && !isDismissingContinuingBar"
+          class="absolute bottom-full left-0 right-0 px-3 py-1 flex items-center justify-between z-10"
           style="background: rgba(229, 169, 62, 0.08); border-top: 1px solid var(--border-subtle);"
         >
-          <UIcon name="i-lucide-git-branch" class="size-3" style="color: var(--accent);" />
-          <span class="text-[10px]" style="color: var(--accent);">
-            Continuing from history
-          </span>
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-git-branch" class="size-3" style="color: var(--accent);" />
+            <span class="text-[10px]" style="color: var(--accent);">
+              Continuing from history
+            </span>
+          </div>
+          <button
+            class="p-1 rounded hover-bg transition-all"
+            style="color: var(--accent);"
+            title="Dismiss"
+            @click="dismissHistoryBars"
+          >
+            <UIcon name="i-lucide-x" class="size-3" />
+          </button>
         </div>
 
         <!-- Chat Input - Works in both modes -->
+        <!-- No longer requires pre-created session - SDK will create session on first message -->
         <ChatV2Input
           v-model="inputText"
-          :disabled="(!currentSessionId && viewMode === 'live') || !isConnected || isStreaming || isCreatingSession"
+          :disabled="isStreaming || isCreatingSession"
           :is-streaming="isStreaming"
           :placeholder="viewMode === 'history' && !isContinuingHistory ? 'Continue this conversation...' : 'Message Claude...'"
           @send="handleSendMessage"
