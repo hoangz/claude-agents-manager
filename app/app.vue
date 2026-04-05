@@ -163,11 +163,8 @@ function badgeFor(to: string) {
         <!-- Brand -->
         <div class="h-[56px] flex items-center gap-2.5 relative" :class="sidebarCollapsed ? 'justify-center px-2' : 'px-4'">
           <template v-if="!sidebarCollapsed">
-            <div
-              class="size-7 rounded-lg flex items-center justify-center relative shrink-0"
-              style="background: linear-gradient(135deg, rgba(79, 142, 247, 0.18) 0%, rgba(79, 142, 247, 0.06) 100%); border: 1px solid rgba(79, 142, 247, 0.2);"
-            >
-              <UIcon name="i-lucide-bot" class="size-3.5" style="color: var(--accent);" />
+            <div class="size-7 rounded-lg flex items-center justify-center relative shrink-0 overflow-hidden">
+              <img src="/favicon.svg" class="size-6 object-contain" alt="logo" />
             </div>
             <div class="flex-1 flex flex-col min-w-0">
               <span class="text-[12px] font-semibold tracking-tight" style="color: var(--text-primary); font-family: var(--font-display);">
