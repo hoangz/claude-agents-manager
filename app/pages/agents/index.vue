@@ -10,8 +10,40 @@ const toast = useToast()
 const showCreateModal = ref(false)
 const showImportModal = ref(false)
 const searchQuery = ref('')
+const activeCategory = ref('All')
 const skillCounts = ref<Record<string, number>>({})
 const creatingTemplate = ref<string | null>(null)
+
+// Auto-detect category from agent slug/name/description/instructions
+function detectCategory(agent: any): string {
+  const text = `${agent.slug} ${agent.frontmatter?.name ?? ''} ${agent.frontmatter?.description ?? ''} ${agent.body ?? ''}`.toLowerCase()
+  if (/cod|dev|program|debug|test|review|refactor|lint|engineer|frontend|backend|fullstack|api|typescript|javascript|python/.test(text)) return 'Coding'
+  if (/writ|content|copy|blog|email|doc|draft|editor|proofreader|journalist|post|seo/.test(text)) return 'Writing'
+  if (/analys|data|research|report|insight|business|finance|statistic|chart|metric/.test(text)) return 'Analysis'
+  if (/design|ui|ux|figma|creative|visual|branding|graphic|product design/.test(text)) return 'Design'
+  if (/devops|deploy|infra|ops|ci|cd|docker|kubernetes|cloud|aws|gcp|azure|monitor/.test(text)) return 'DevOps'
+  if (/manag|coordinat|plan|orchestrat|project|scrum|agile|lead|director/.test(text)) return 'Manager'
+  return 'General'
+}
+
+const agentsWithCategory = computed(() =>
+  agents.value.map(a => ({
+    ...a,
+    _category: detectCategory(a),
+  }))
+)
+
+const categoryCounts = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const a of agentsWithCategory.value) {
+    counts[a._category] = (counts[a._category] ?? 0) + 1
+  }
+  return counts
+})
+
+const availableCategories = computed(() =>
+  Object.keys(categoryCounts.value).sort()
+)
 
 // --- Bulk selection ---
 const selectedSlugs = ref<Set<string>>(new Set())
@@ -55,12 +87,18 @@ onMounted(async () => {
 })
 
 const filteredAgents = computed(() => {
-  if (!searchQuery.value) return agents.value
-  const q = searchQuery.value.toLowerCase()
-  return agents.value.filter(a =>
-    a.frontmatter.name.toLowerCase().includes(q) ||
-    a.frontmatter.description?.toLowerCase().includes(q)
-  )
+  let list = agentsWithCategory.value
+  if (activeCategory.value !== 'All') {
+    list = list.filter(a => a._category === activeCategory.value)
+  }
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(a =>
+      a.frontmatter.name.toLowerCase().includes(q) ||
+      a.frontmatter.description?.toLowerCase().includes(q)
+    )
+  }
+  return list
 })
 
 const groupedAgents = computed(() => {
@@ -116,12 +154,55 @@ async function useTemplate(templateId: string) {
       </p>
 
       <!-- Search -->
-      <div class="mb-5">
+      <div class="mb-4">
         <input
           v-model="searchQuery"
           placeholder="Search agents..."
           class="field-search max-w-xs"
         />
+      </div>
+
+      <!-- Category filter pills -->
+      <div class="flex flex-wrap items-center gap-1.5 mb-4">
+        <button
+          class="category-pill"
+          :class="{ 'category-pill--active': activeCategory === 'All' }"
+          @click="activeCategory = 'All'"
+        >
+          All <span class="pill-count">{{ agents.length }}</span>
+        </button>
+        <button
+          v-for="cat in availableCategories"
+          :key="cat"
+          class="category-pill"
+          :class="{ 'category-pill--active': activeCategory === cat }"
+          @click="activeCategory = cat"
+        >
+          {{ cat }} <span class="pill-count">{{ categoryCounts[cat] }}</span>
+        </button>
+      </div>
+
+      <!-- Active filter bar -->
+      <div v-if="activeCategory !== 'All' || searchQuery" class="flex items-center gap-2 mb-3 text-[12px]" style="color: var(--text-tertiary);">
+        <UIcon name="i-lucide-filter" class="size-3.5 shrink-0" />
+        <span>
+          <template v-if="activeCategory !== 'All' && searchQuery">
+            {{ filteredAgents.length }} agents in <strong style="color: var(--text-secondary);">{{ activeCategory }}</strong> matching "{{ searchQuery }}"
+          </template>
+          <template v-else-if="activeCategory !== 'All'">
+            {{ filteredAgents.length }} agent{{ filteredAgents.length === 1 ? '' : 's' }} in <strong style="color: var(--text-secondary);">{{ activeCategory }}</strong>
+          </template>
+          <template v-else>
+            {{ filteredAgents.length }} result{{ filteredAgents.length === 1 ? '' : 's' }} for "{{ searchQuery }}"
+          </template>
+        </span>
+        <button
+          class="ml-1 px-2 py-0.5 rounded text-[11px] transition-colors"
+          style="color: var(--accent);"
+          @click="activeCategory = 'All'; searchQuery = ''"
+        >
+          Clear filters
+        </button>
       </div>
 
       <!-- Error state -->
@@ -339,5 +420,41 @@ async function useTemplate(templateId: string) {
 .group:hover .agent-checkbox,
 .agent-checkbox--visible {
   opacity: 1;
+}
+
+/* Category filter pills */
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-sans);
+}
+
+.category-pill:hover {
+  color: var(--text-primary);
+  border-color: var(--border-default);
+  background: var(--surface-hover);
+}
+
+.category-pill--active {
+  color: var(--accent) !important;
+  background: var(--accent-muted) !important;
+  border-color: var(--accent-glow) !important;
+}
+
+.pill-count {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  opacity: 0.7;
 }
 </style>

@@ -4,7 +4,11 @@
 
 **Quản lý toàn bộ trợ lý AI của bạn — không cần biết code.**
 
-Thay vì sửa hàng chục file rải rác trong máy, giờ bạn chỉ cần click chuột.
+Giao diện trực quan để tạo, chỉnh sửa và vận hành hệ thống Claude agents, workflows, skills, commands và MCP servers — tất cả trong một nơi.
+
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Nuxt 3](https://img.shields.io/badge/Nuxt-3-00DC82.svg)](https://nuxt.com)
+[![Bun](https://img.shields.io/badge/runtime-Bun-fbf0df.svg)](https://bun.sh)
 
 </div>
 
@@ -16,18 +20,8 @@ Thay vì sửa hàng chục file rải rác trong máy, giờ bạn chỉ cần 
 - [Khởi động hàng ngày](#khởi-động-hàng-ngày)
 - [Tổng quan giao diện](#tổng-quan-giao-diện)
 - [Hướng dẫn từng tính năng](#hướng-dẫn-từng-tính-năng)
-  - [Chat với trợ lý](#-chat-với-trợ-lý)
-  - [Quản lý Agents](#-quản-lý-agents)
-  - [Tạo Commands](#-tạo-commands)
-  - [Quản lý Skills](#-quản-lý-skills)
-  - [Sơ đồ kết nối](#-sơ-đồ-kết-nối)
-  - [Workflow Builder](#-workflow-builder)
-  - [Terminal tích hợp](#-terminal-tích-hợp)
-  - [Lịch sử hoạt động](#-lịch-sử-hoạt-động)
-  - [Sức khoẻ hệ thống](#-sức-khoẻ-hệ-thống)
-  - [Khám phá Templates](#-khám-phá-templates)
-  - [Cài đặt hệ thống](#-cài-đặt-hệ-thống)
 - [Câu hỏi thường gặp](#câu-hỏi-thường-gặp)
+- [Changelog](#changelog)
 
 ---
 
@@ -39,16 +33,15 @@ Thay vì sửa hàng chục file rải rác trong máy, giờ bạn chỉ cần 
 ```bash
 curl -fsSL https://bun.sh/install | bash
 ```
-
 Đóng Terminal lại, mở lại Terminal mới.
 
-**Bước 2** — Tải ứng dụng về máy:
+**Bước 2** — Tải ứng dụng:
 ```bash
 git clone https://github.com/hoangz/claude-agents-manager.git
 cd claude-agents-manager
 ```
 
-**Bước 3** — Cài các gói cần thiết:
+**Bước 3** — Cài dependencies:
 ```bash
 bun install
 ```
@@ -58,380 +51,227 @@ bun install
 bun run dev
 ```
 
-**Bước 5** — Mở trình duyệt, truy cập:
+**Bước 5** — Mở trình duyệt:
 ```
 http://localhost:3000
 ```
 
-Ứng dụng sẽ tự động đọc tất cả cấu hình Claude từ thư mục `~/.claude/` trên máy bạn.
+Ứng dụng tự động đọc cấu hình Claude từ `~/.claude/` trên máy bạn.
 
 ---
 
 ## Khởi động hàng ngày
-
-Mỗi lần muốn dùng, mở Terminal và chạy:
 
 ```bash
 cd claude-agents-manager
 bun run dev
 ```
 
-Sau đó mở trình duyệt tại **http://localhost:3000**.
-
-Để tắt: nhấn `Ctrl + C` trong Terminal.
+Truy cập **http://localhost:3000** — nhấn `Ctrl + C` để tắt.
 
 ---
 
 ## Tổng quan giao diện
 
-Thanh điều hướng bên trái gồm các mục chính:
+Thanh điều hướng bên trái:
 
 | Mục | Dùng để làm gì |
 |-----|----------------|
-| **Chat** | Nhắn tin với trợ lý AI |
-| **Agents** | Tạo và quản lý các trợ lý |
-| **Commands** | Tạo lệnh tắt cho các tác vụ lặp lại |
-| **Skills** | Thêm kỹ năng cho trợ lý |
-| **Graph** | Xem bản đồ kết nối tổng thể |
+| **Dashboard** | Tổng quan hệ thống |
 | **Workflows** | Xây dựng pipeline nhiều bước |
-| **CLI** | Terminal tích hợp trong trình duyệt |
-| **History** | Lịch sử các phiên làm việc |
-| **Health** | Đánh giá sức khoẻ và gợi ý cải thiện hệ thống |
+| **Agents** | Tạo và quản lý trợ lý AI |
+| **Skills** | Quản lý kỹ năng cho agents |
+| **Plugins** | Quản lý plugin |
+| **Commands** | Tạo lệnh tắt `/command` |
+| **MCP Servers** | Kết nối công cụ bên ngoài |
+| **Graph** | Bản đồ kết nối tổng thể |
+| **Health** | Đánh giá sức khoẻ hệ thống |
+| **History** | Lịch sử phiên làm việc |
+| **CLI** | Terminal tích hợp |
 | **Explore** | Tải templates từ cộng đồng |
-| **Settings** | Cài đặt hệ thống & sao lưu dữ liệu |
+| **Settings** | Cài đặt & sao lưu dữ liệu |
 
-> **Mỗi trang đều có nút `?`** ở góc dưới bên phải — click để xem hướng dẫn sử dụng ngay trong trang.
+> Mỗi trang có nút **Hướng dẫn** ở góc trên phải — click để xem hướng dẫn sử dụng ngay trong trang.
 
 ---
 
 ## Hướng dẫn từng tính năng
 
-### 💬 Chat với trợ lý
+### 🔄 Workflow Builder
 
-**Vào:** menu **Chat**
+Xây dựng pipeline nhiều bước — mỗi bước do một agent thực hiện, kết quả bước này là đầu vào bước tiếp theo.
 
-Giao diện nhắn tin trực tiếp với agents, tương tự như nhắn tin trên Zalo hay Messenger.
+**Ví dụ:** `Thu thập dữ liệu` → `Phân tích` → `Viết báo cáo` → `Gửi email`
 
-**Cách dùng:**
-1. Chọn agent từ thanh trên (hoặc để mặc định)
-2. Gõ tin nhắn vào ô phía dưới
-3. Nhấn **Enter** để gửi — `Shift + Enter` để xuống dòng
-4. AI trả lời ngay lập tức, có thể thấy cả quá trình "suy nghĩ"
-
-**Lưu ý:**
-- Lịch sử hội thoại được lưu tự động, có thể xem lại bất kỳ lúc nào
-- Mỗi cuộc hội thoại là một "session" riêng biệt
-- Bấm **New Session** để bắt đầu cuộc trò chuyện mới
+1. Click **New Workflow** → đặt tên và mô tả
+2. Click **Add Step** → chọn agent + đặt nhãn cho từng bước
+3. Kéo thả để sắp xếp thứ tự
+4. Click **Save** → Click **Run** để chạy và theo dõi kết quả từng bước
 
 ---
 
 ### 🤖 Quản lý Agents
 
-**Vào:** menu **Agents**
-
-Agents là các trợ lý AI với vai trò và cá tính riêng. Ví dụ: "Trợ lý viết nội dung", "Chuyên gia phân tích dữ liệu", "Trợ lý lập trình"...
+Agents là trợ lý AI với vai trò riêng. Ví dụ: "Trợ lý viết nội dung", "Chuyên gia phân tích dữ liệu"...
 
 #### Tạo agent mới
+1. Click **New Agent** (góc trên phải)
+2. Điền **Name**, **Description**, chọn **Model**:
+   - `Sonnet` — Cân bằng tốc độ / chất lượng *(khuyến nghị)*
+   - `Opus` — Mạnh nhất, cho tác vụ phức tạp
+   - `Haiku` — Nhanh nhất, tác vụ đơn giản
+3. Điền **Instructions** (càng chi tiết càng tốt) → **Save**
 
-1. Click nút **New Agent** (góc trên phải)
-2. Điền thông tin:
-   - **Name** — Tên trợ lý (ví dụ: `Trợ lý viết email`)
-   - **Description** — Mô tả ngắn gọn nhiệm vụ
-   - **Model** — Chọn sức mạnh AI:
-     - `Sonnet` — Cân bằng tốc độ và chất lượng *(khuyến nghị)*
-     - `Opus` — Mạnh nhất, dùng cho tác vụ phức tạp
-     - `Haiku` — Nhanh nhất, phù hợp tác vụ đơn giản
-   - **Instructions** — Hướng dẫn cụ thể cho trợ lý (càng chi tiết càng tốt)
-3. Click **Save**
+#### Phân loại agents
+Agents tự động được phân vào các nhóm:
+- **Coding** — lập trình, debug, review code
+- **Writing** — viết nội dung, blog, email
+- **Analysis** — phân tích dữ liệu, báo cáo
+- **Design** — UI/UX, thiết kế
+- **DevOps** — deploy, hạ tầng, CI/CD
+- **Manager** — quản lý dự án, điều phối
+- **General** — tổng hợp
 
-#### Chỉnh sửa agent có sẵn
-
-1. Click vào tên agent trong danh sách
-2. Thay đổi bất kỳ thông tin nào
-3. Click **Save**
-
-#### Test agent ngay trong trang
-
-1. Mở agent bất kỳ
-2. Chuyển sang tab **Studio** (bên phải)
-3. Gõ tin nhắn thử → xem phản hồi và từng bước xử lý của AI
+Dùng filter pills để lọc theo nhóm.
 
 #### Xóa nhiều agents cùng lúc
-
-1. Hover chuột vào agent → tick ô vuông xuất hiện ở góc trên trái
-2. Chọn thêm các agents muốn xóa
-3. Thanh **Bulk Actions** hiện ra ở dưới cùng màn hình
-4. Click **Delete Selected** → xác nhận
-
-> **Lưu ý:** Mỗi agent được lưu thành file `.md` trong thư mục `~/.claude/agents/`. Bạn có thể xem và sửa trực tiếp file nếu cần.
-
----
-
-### ⚡ Tạo Commands
-
-**Vào:** menu **Commands**
-
-Commands là các lệnh tắt — gõ `/tên-lệnh` trong Claude và AI sẽ tự thực hiện một tác vụ đã được định nghĩa sẵn.
-
-**Ví dụ thực tế:**
-- `/tom-tat` → AI tóm tắt nội dung đang làm
-- `/review-code` → AI đánh giá đoạn code
-- `/viet-email` → AI soạn email theo mẫu
-
-#### Tạo command mới
-
-1. Click **New Command**
-2. Điền thông tin:
-   - **Name** — Tên lệnh (không dấu, không cách)
-   - **Description** — Lệnh này làm gì
-   - **Argument hint** — Gợi ý tham số đầu vào (nếu cần), ví dụ: `[nội dung cần tóm tắt]`
-   - **Allowed tools** — Các quyền AI được phép dùng khi thực thi lệnh
-   - **Agent** — Liên kết với agent cụ thể (tùy chọn)
-   - **Body** — Nội dung prompt đầy đủ của lệnh
-3. Click **Save**
-
-> Commands được lưu vào `~/.claude/commands/`. Có thể tổ chức theo thư mục con để dễ quản lý.
+Hover vào agent → tick ô checkbox → chọn thêm → thanh **Bulk Actions** hiện ở dưới → **Delete Selected**.
 
 ---
 
 ### 🧠 Quản lý Skills
 
-**Vào:** menu **Skills**
+Skills là kỹ năng bổ sung, gắn vào nhiều agent khác nhau.
 
-Skills là các "kỹ năng" bổ sung có thể gắn vào nhiều agent khác nhau. Thay vì viết lại cùng một hướng dẫn cho nhiều agent, bạn tạo một skill và gắn vào bất kỳ agent nào cần.
+#### Phân loại skills
+- **Development** · **Writing** · **Analysis** · **Design** · **DevOps** · **General**
 
-#### Phân loại & tìm kiếm
+Hỗ trợ **List / Grid** view, sắp xếp theo tên hoặc ngày tạo.
 
-Skills được tự động phân nhóm:
-- **Development** — lập trình, code, kỹ thuật
-- **Writing** — viết lách, nội dung, blog
-- **Analysis** — phân tích, dữ liệu, báo cáo
-- **Design** — thiết kế, UI/UX
-- **DevOps** — deploy, CI/CD, hạ tầng
-- **General** — kỹ năng tổng hợp
-
-Dùng các nút lọc ở trên để xem theo nhóm. Chuyển đổi **List / Grid** view tuỳ sở thích. Sắp xếp theo tên, ngày tạo, hoặc mức độ sử dụng.
-
-#### Tạo skill mới
-
-1. Click **New Skill**
-2. Điền tên, mô tả và nội dung skill
-3. Click **Save**
-
-#### Import skill từ GitHub
-
+#### Import từ GitHub
 1. Click **Import from GitHub**
-2. Dán URL của repo GitHub (repo phải có file `SKILL.md` bên trong)
-3. Xem danh sách skills tìm thấy trong repo
-4. Chọn những skills muốn cài → Click **Import**
-5. Skills được tải về `~/.claude/skills/`
-
-#### Gắn skill vào agent
-
-1. Vào trang chỉnh sửa agent
-2. Ở mục **Skills**, chọn skill muốn gắn
-3. Save agent
+2. Dán URL repo (phải có file `SKILL.md`)
+3. Chọn skills muốn cài → **Import**
 
 ---
 
-### 🔗 Sơ đồ kết nối
+### ⚡ Tạo Commands
 
-**Vào:** menu **Graph**
+Commands là lệnh tắt — gõ `/tên-lệnh` trong Claude để thực thi tác vụ định sẵn.
 
-Bản đồ trực quan hiển thị toàn bộ mối quan hệ trong hệ thống — agent nào đang dùng skill nào, command nào liên kết agent nào.
-
-**Cách đọc sơ đồ:**
-- Mỗi ô là một thực thể (agent, skill, command, plugin, MCP server...)
-- Đường nối thể hiện mối quan hệ phụ thuộc
-- Màu sắc khác nhau phân biệt loại thực thể
-
-**Tính năng lọc:**
-- **Ô tìm kiếm** — gõ tên để tìm node cụ thể
-- **Filter pills** — lọc theo loại: All / Agents / Commands / Skills / Plugins / MCP
-- **Active Only** — chỉ hiện những thứ đang có kết nối, ẩn những node "cô lập"
-
-Click vào bất kỳ node nào để xem chi tiết và điều hướng đến trang chỉnh sửa.
+1. Click **New Command**
+2. Điền **Name** (không dấu, không cách), **Description**, **Body** (nội dung prompt)
+3. Tuỳ chọn: **Argument hint**, **Allowed tools**, liên kết **Agent**
+4. **Save** — lệnh sẵn sàng dùng trong Claude Code CLI
 
 ---
 
-### 🔄 Workflow Builder
+### 🔗 Sơ đồ kết nối (Graph)
 
-**Vào:** menu **Workflows**
+Bản đồ trực quan toàn bộ hệ thống:
 
-Workflow là chuỗi nhiều bước — mỗi bước do một agent khác nhau thực hiện, kết quả bước này là đầu vào bước tiếp theo.
-
-**Ví dụ:** `Thu thập dữ liệu` → `Phân tích` → `Viết báo cáo` → `Gửi email`
-
-#### Tạo workflow mới
-
-1. Click **New Workflow**
-2. Đặt tên và mô tả
-3. Click **Add Step** để thêm từng bước
-4. Mỗi bước: chọn agent thực hiện + đặt nhãn mô tả
-5. Kéo thả để sắp xếp thứ tự
-6. Click **Save**
-
-#### Chạy workflow
-
-1. Mở workflow
-2. Click **Run**
-3. Theo dõi kết quả từng bước theo thời gian thực
+- **Tìm kiếm** — gõ tên để highlight node
+- **Filter pills** — lọc theo loại: Agents / Commands / Skills / Plugins / MCP
+- **Active Only** — ẩn node không có kết nối, chỉ hiện những gì đang hoạt động
+- Click node để xem chi tiết và điều hướng đến trang chỉnh sửa
 
 ---
 
-### 🖥️ Terminal tích hợp
+### 📋 Lịch sử hoạt động (History)
 
-**Vào:** menu **CLI**
-
-Terminal đầy đủ ngay trong trình duyệt — không cần mở cửa sổ Terminal riêng. Có hai chế độ:
-
-#### Chế độ Terminal
-
-Giao diện dòng lệnh như Terminal thông thường, nhưng có thêm bảng thông tin bên phải hiển thị:
-
-- **Tokens** — Số token đang dùng và chi phí ước tính theo thời gian thực
-- **Files** — Các file đang được AI đọc/ghi
-- **Tools** — Timeline các công cụ AI đã sử dụng
-- **History** — Lịch sử các sessions trước
-
-**Cách dùng:**
-1. Chọn agent (tùy chọn) từ dropdown phía trên
-2. Click **Start Session**
-3. Gõ lệnh như Terminal thông thường
-4. Xem thông tin chi tiết ở bảng bên phải
-
-#### Chế độ Chat
-
-Giao diện nhắn tin, tương tự mục Chat nhưng nằm trong trang CLI.
-
-Chuyển đổi giữa hai chế độ bằng tab **Terminal** / **Chat** phía trên.
-
-> **Lưu ý:** Sessions tự động đóng sau 30 phút không hoạt động.
-
----
-
-### 📋 Lịch sử hoạt động
-
-**Vào:** menu **History**
-
-Xem lại toàn bộ lịch sử các phiên làm việc với Claude CLI — tổ chức theo dự án.
-
-**Tính năng:**
-- Duyệt danh sách dự án và các session trong từng dự án
-- Xem thời gian tương đối (ví dụ: "2 giờ trước", "hôm qua")
-- Tìm kiếm session theo tên hoặc nội dung
+Xem lại toàn bộ lịch sử sessions Claude CLI theo dự án:
+- Duyệt sessions theo dự án, thời gian tương đối
+- Tìm kiếm theo tên hoặc nội dung
 - Xem model AI đã dùng trong mỗi session
-- Click vào session để xem chi tiết hội thoại
-
-**Dùng để:**
-- Tra lại những gì đã làm trong các phiên trước
-- Tìm lại kết quả hoặc code đã sinh ra trước đó
-- Theo dõi lịch sử làm việc theo dự án
 
 ---
 
-### 🏥 Sức khoẻ hệ thống
+### 🏥 Sức khoẻ hệ thống (Health)
 
-**Vào:** menu **Health**
+Tự động phân tích cấu hình và đưa ra điểm số 0–100:
+- **80–100** 🟢 Khoẻ mạnh
+- **50–79** 🟡 Cần chú ý
+- **0–49** 🔴 Cần cải thiện
 
-Tự động phân tích toàn bộ cấu hình và đưa ra điểm số + gợi ý cải thiện.
-
-**Cách đọc trang Health:**
-- **Điểm số (0–100)** — đo lường mức độ hoàn thiện của hệ thống
-- **Màu xanh (80–100)** — hệ thống khoẻ mạnh
-- **Màu vàng (50–79)** — có vài điểm cần chú ý
-- **Màu đỏ (0–49)** — cần cải thiện sớm
-
-**Filter tab:**
-- **All** — xem toàn bộ gợi ý
-- **Warnings** — chỉ xem các cảnh báo quan trọng
-- **Info** — xem thông tin tham khảo
-
-**Dùng để:**
-- Phát hiện agent thiếu instructions, skill chưa được gắn vào agent nào
-- Tìm command chưa liên kết với agent
-- Nhận gợi ý tối ưu hoá hệ thống
-- Click **Fix →** để đi thẳng đến trang cần chỉnh sửa
+Filter: **All / Warnings / Info** — Click **Fix →** để đến thẳng trang cần sửa.
 
 ---
 
-### 🌍 Khám phá Templates
+### 🖥️ Terminal tích hợp (CLI)
 
-**Vào:** menu **Explore**
-
-Thư viện templates và agents có sẵn từ cộng đồng — cài về và dùng ngay.
-
-**Cách cài template:**
-1. Browse danh sách
-2. Click vào template muốn xem chi tiết
-3. Click **Install**
-4. Template được tải về `~/.claude/` và xuất hiện ngay trong danh sách agents/skills
-
-Sau khi cài, có thể vào **Agents** chỉnh sửa lại cho phù hợp nhu cầu riêng.
+Terminal đầy đủ trong trình duyệt, có 2 chế độ:
+- **Terminal** — dòng lệnh với bảng info real-time (tokens, files, tools, history)
+- **Chat** — giao diện nhắn tin
 
 ---
 
-### ⚙️ Cài đặt hệ thống
+### ⚙️ Cài đặt & Sao lưu (Settings)
 
-**Vào:** menu **Settings**
+#### Export (Sao lưu)
+**Settings** → **Data Management** → **Export Config** → tải file JSON chứa toàn bộ agents, commands, skills, workflows.
 
-Quản lý cấu hình toàn bộ ứng dụng:
-
-- **Plugins** — Bật/tắt các plugin đang cài
-- **MCP Servers** — Thêm hoặc xóa MCP server (kết nối Claude với công cụ bên ngoài)
-- **Marketplace Sources** — Thêm nguồn template tùy chỉnh
-- **Status Line** — Cài đặt thanh trạng thái Claude Code
-
-#### Sao lưu & khôi phục dữ liệu
-
-**Export (Sao lưu):**
-1. Vào **Settings** → mục **Data Management**
-2. Click **Export Config**
-3. File JSON chứa toàn bộ agents, commands, skills, workflows sẽ được tải về máy
-4. Lưu file này để backup hoặc chuyển sang máy khác
-
-**Import (Khôi phục):**
-1. Click **Import Config**
-2. Kéo thả file JSON vào ô, hoặc click để chọn file
-3. Xem trước danh sách dữ liệu sẽ được import
-4. Chọn có ghi đè dữ liệu hiện tại không → Click **Import**
+#### Import (Khôi phục)
+**Import Config** → kéo thả file JSON → xem trước → chọn ghi đè hay không → **Import**.
 
 ---
 
 ## Câu hỏi thường gặp
 
 **Dữ liệu lưu ở đâu?**
-Tất cả lưu trong thư mục `~/.claude/` trên máy bạn. Không có server ngoài, không cloud — hoàn toàn trên máy cá nhân.
-
 ```
 ~/.claude/
-├── agents/           ← Các trợ lý AI
-├── commands/         ← Lệnh tắt
-├── skills/           ← Kỹ năng bổ sung
-├── workflows/        ← Pipeline nhiều bước
-└── settings.json     ← Cài đặt chung
+├── agents/       ← Trợ lý AI
+├── commands/     ← Lệnh tắt
+├── skills/       ← Kỹ năng bổ sung
+├── workflows/    ← Pipeline nhiều bước
+└── settings.json ← Cài đặt chung
 ```
-
-**Tắt ứng dụng có mất dữ liệu không?**
-Không. Mọi thứ đã được lưu vào file ngay khi bạn nhấn Save.
+Tất cả trên máy cá nhân, không cloud, không server ngoài.
 
 **Thay đổi trong UI có ảnh hưởng đến Claude Code CLI không?**
-Có — vì cả hai đều đọc cùng thư mục `~/.claude/`. Thay đổi trong UI sẽ có hiệu lực ngay với Claude Code CLI và ngược lại.
+Có — cả hai đọc cùng `~/.claude/`. Thay đổi có hiệu lực ngay.
 
-**Làm sao backup toàn bộ cấu hình?**
-Vào **Settings** → **Data Management** → **Export Config**. File JSON tải về chứa toàn bộ agents, skills, commands, workflows.
-
-**Ứng dụng báo lỗi "port 3000 đã được dùng"?**
-Chạy lệnh sau để tắt process cũ, sau đó thử lại:
+**Lỗi "port 3000 đã được dùng"?**
 ```bash
 lsof -ti:3000 | xargs kill -9
 ```
 
 **Muốn dùng thư mục `.claude` khác?**
-Tạo file `.env` trong thư mục ứng dụng:
+Tạo file `.env`:
 ```
 CLAUDE_DIR=/đường/dẫn/tới/thư-mục-claude
 ```
+
+---
+
+## Changelog
+
+### v2.0.0 — UI Redesign & New Features
+
+#### 🎨 Giao diện
+- **Theme**: Figma / Notion Dark — nền ấm `#1e1e1e`, accent teal `#00c9a7`
+- **Font**: Chuyển sang **Inter** (font Facebook/Meta) — heading đậm 700–800
+- **Border radius**: Bo tròn hơn (6/8/12px)
+
+#### 🆕 Tính năng mới
+- **History page** — xem lịch sử sessions Claude CLI theo dự án
+- **Health page** — health score 0–100, gợi ý cải thiện, filter Warnings/Info
+- **Export / Import config** — backup toàn bộ cấu hình ra file JSON, import lại
+- **Bulk delete agents** — chọn nhiều agent và xóa cùng lúc
+- **Agents categorization** — tự động phân nhóm Coding/Writing/Analysis/Design/DevOps/Manager/General + filter pills
+- **Skills categorization** — tự động phân nhóm + List/Grid view + sort
+- **Help Guide** — nút Hướng dẫn trên mỗi trang, hướng dẫn từng bước cho người dùng mới
+
+#### 📊 Graph
+- Search node theo tên
+- Filter pills theo loại (Agents / Commands / Skills / Plugins / MCP)
+- Toggle **Active Only** — ẩn node không kết nối
+- Cột cố định: Commands → Agents → Skills → Plugins → MCP
+- Edge colors phân biệt 3 loại quan hệ
+
+#### 🧭 Navigation
+- Thứ tự sidebar mới: Dashboard → Workflows → Agents → Skills → Plugins → Commands → MCP Servers
+- Thêm History và Health vào secondary nav
 
 ---
 
@@ -441,10 +281,11 @@ CLAUDE_DIR=/đường/dẫn/tới/thư-mục-claude
 |---|---|
 | **Nền tảng** | Nuxt 3 + Vue 3 |
 | **Giao diện** | Nuxt UI + Tailwind CSS |
-| **Font chữ** | Inter + Fira Code |
+| **Font** | Inter + Fira Code |
 | **Đồ thị** | VueFlow |
 | **Terminal** | xterm.js + node-pty |
 | **AI SDK** | @anthropic-ai/claude-agent-sdk |
+| **Runtime** | Bun |
 | **License** | MIT |
 
 ---

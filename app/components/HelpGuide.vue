@@ -5,15 +5,18 @@ const { isOpen, currentHelp } = useHelpTooltips()
 <template>
   <!-- Only render when current page has help content -->
   <template v-if="currentHelp">
-    <!-- Floating help button -->
-    <button
-      class="help-guide-btn"
-      :title="isOpen ? 'Đóng hướng dẫn' : 'Mở hướng dẫn'"
-      :aria-label="isOpen ? 'Đóng hướng dẫn' : 'Mở hướng dẫn'"
-      @click="isOpen = !isOpen"
-    >
-      <UIcon :name="isOpen ? 'i-lucide-x' : 'i-lucide-help-circle'" class="size-5" />
-    </button>
+    <!-- Help button teleported into page header slot -->
+    <Teleport to="#page-header-help" defer>
+      <button
+        class="help-guide-btn"
+        :title="isOpen ? 'Đóng hướng dẫn' : 'Hướng dẫn sử dụng'"
+        :aria-label="isOpen ? 'Đóng hướng dẫn' : 'Hướng dẫn sử dụng'"
+        @click="isOpen = !isOpen"
+      >
+        <UIcon :name="isOpen ? 'i-lucide-x' : 'i-lucide-circle-help'" class="size-4" />
+        <span class="help-guide-label">Hướng dẫn</span>
+      </button>
+    </Teleport>
 
     <!-- Slide-in help panel -->
     <Teleport to="body">
@@ -110,32 +113,37 @@ const { isOpen, currentHelp } = useHelpTooltips()
 </template>
 
 <style scoped>
-/* Floating help button */
+/* Inline header help button */
 .help-guide-btn {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 40;
-  width: 40px;
-  height: 40px;
-  border-radius: 9999px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
   background: var(--accent-muted);
-  border: 1px solid var(--accent-glow);
+  border: 1px solid var(--border-default);
   color: var(--accent);
+  white-space: nowrap;
 }
 
 .help-guide-btn:hover {
-  transform: scale(1.08);
-  box-shadow: 0 0 16px var(--accent-glow);
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
 }
 
 .help-guide-btn:active {
-  transform: scale(0.96);
+  opacity: 0.8;
+}
+
+.help-guide-label {
+  display: inline;
 }
 
 /* Backdrop overlay */
