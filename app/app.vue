@@ -120,6 +120,8 @@ const navLinks = [
 const navSecondary = [
   { label: 'Explore', icon: 'i-lucide-compass', to: '/explore' },
   { label: 'Graph', icon: 'i-lucide-workflow', to: '/graph' },
+  { label: 'Health', icon: 'i-lucide-activity', to: '/health' },
+  { label: 'History', icon: 'i-lucide-clock', to: '/history' },
   { label: 'CLI', icon: 'i-lucide-terminal-square', to: '/cli' },
   { label: 'Settings', icon: 'i-lucide-settings', to: '/settings' },
 ]
@@ -155,7 +157,7 @@ function badgeFor(to: string) {
         <!-- Ambient glow at top — stronger -->
         <div
           class="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-32 pointer-events-none"
-          style="background: radial-gradient(ellipse, rgba(229, 169, 62, 0.1) 0%, transparent 70%);"
+          style="background: radial-gradient(ellipse, rgba(79, 142, 247, 0.12) 0%, transparent 70%);"
         />
 
         <!-- Brand -->
@@ -163,7 +165,7 @@ function badgeFor(to: string) {
           <template v-if="!sidebarCollapsed">
             <div
               class="size-7 rounded-lg flex items-center justify-center relative shrink-0"
-              style="background: linear-gradient(135deg, rgba(229, 169, 62, 0.18) 0%, rgba(229, 169, 62, 0.06) 100%); border: 1px solid rgba(229, 169, 62, 0.15);"
+              style="background: linear-gradient(135deg, rgba(79, 142, 247, 0.18) 0%, rgba(79, 142, 247, 0.06) 100%); border: 1px solid rgba(79, 142, 247, 0.2);"
             >
               <UIcon name="i-lucide-bot" class="size-3.5" style="color: var(--accent);" />
             </div>
@@ -427,6 +429,7 @@ function badgeFor(to: string) {
     <GlobalSearch />
     <ChatPanel v-model:open="chatOpen" />
     <FileEditorSidebar />
+    <HelpGuide />
   </UApp>
 </template>
 

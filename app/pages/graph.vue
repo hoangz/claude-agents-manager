@@ -21,6 +21,13 @@ const relationships = ref<Relationship[]>([])
 const loading = ref(true)
 const showLegend = ref(true)
 
+// Search & filter state
+const searchQuery = ref('')
+const activeFilters = ref<Set<string>>(new Set())
+
+// Active only toggle
+const showActiveOnly = ref(false)
+
 const { workingDir } = useWorkingDir()
 
 onMounted(async () => {
@@ -34,18 +41,39 @@ onMounted(async () => {
 })
 
 // --- Layout constants ---
-const NODE_WIDTH = 220
-const COL_GAP = NODE_WIDTH + 60
-const Y_GAP = 80
-const HEADER_Y = -20
+const NODE_WIDTH = 230
+const COL_GAP = NODE_WIDTH + 80
+const Y_GAP = 88
+const HEADER_Y = -32
 
 // --- Column labels ---
-const columnLabels: Record<string, { label: string; icon: string }> = {
-  command: { label: 'Commands', icon: '>_' },
-  skill: { label: 'Skills', icon: 'zap' },
-  agent: { label: 'Agents', icon: 'cpu' },
-  plugin: { label: 'Plugins', icon: 'puzzle' },
-  mcp: { label: 'MCP Servers', icon: 'server' },
+const columnLabels: Record<string, { label: string; icon: string; color: string }> = {
+  command: { label: 'Commands', icon: '>_', color: 'var(--text-disabled)' },
+  agent: { label: 'Agents', icon: 'cpu', color: 'var(--accent)' },
+  skill: { label: 'Skills', icon: 'zap', color: 'var(--model-haiku)' },
+  plugin: { label: 'Plugins', icon: 'puzzle', color: 'var(--model-sonnet)' },
+  mcp: { label: 'MCP Servers', icon: 'server', color: 'var(--accent)' },
+}
+
+// --- Filter types available ---
+const allFilterTypes = computed(() => {
+  const types: string[] = []
+  if (commands.value.length > 0) types.push('command')
+  if (agents.value.length > 0) types.push('agent')
+  if (skills.value.length > 0) types.push('skill')
+  if (plugins.value.length > 0) types.push('plugin')
+  if (mcpServers.value.length > 0) types.push('mcp')
+  return types
+})
+
+function toggleFilter(type: string) {
+  if (activeFilters.value.has(type)) {
+    activeFilters.value.delete(type)
+  } else {
+    activeFilters.value.add(type)
+  }
+  // trigger reactivity
+  activeFilters.value = new Set(activeFilters.value)
 }
 
 // --- Connected node IDs (for orphan detection) ---
@@ -58,35 +86,75 @@ const connectedNodeIds = computed(() => {
   return ids
 })
 
-// --- Build columns dynamically ---
+// --- Filter items by search query ---
+function matchesSearch(name: string, description?: string): boolean {
+  if (!searchQuery.value) return true
+  const q = searchQuery.value.toLowerCase()
+  return (
+    name.toLowerCase().includes(q) ||
+    (description?.toLowerCase().includes(q) ?? false)
+  )
+}
+
+// --- Filter items by active state ---
+function matchesActiveFilter(nodeId: string, item: any, type: string): boolean {
+  if (!showActiveOnly.value) return true
+  if (type === 'plugin') return item.enabled === true
+  if (type === 'mcp') return true
+  // agents, skills, commands: phải có ít nhất 1 connection
+  return connectedNodeIds.value.has(nodeId)
+}
+
+// --- Build columns: Commands → Agents → Skills → Plugins → MCP ---
 const columns = computed(() => {
   const cols: { type: string; items: any[] }[] = []
+  // Fixed left-to-right order: source → target
+  if (commands.value.length > 0) cols.push({ type: 'command', items: commands.value })
   if (agents.value.length > 0) cols.push({ type: 'agent', items: agents.value })
   if (skills.value.length > 0) cols.push({ type: 'skill', items: skills.value })
   if (plugins.value.length > 0) cols.push({ type: 'plugin', items: plugins.value })
   if (mcpServers.value.length > 0) cols.push({ type: 'mcp', items: mcpServers.value })
-  if (commands.value.length > 0) cols.push({ type: 'command', items: commands.value })
   return cols
 })
 
 const nodes = computed(() => {
   const result: any[] = []
 
-  columns.value.forEach((col, colIndex) => {
+  // Apply type filter
+  const filteredCols = activeFilters.value.size > 0
+    ? columns.value.filter(c => activeFilters.value.has(c.type))
+    : columns.value
+
+  filteredCols.forEach((col, colIndex) => {
     const x = colIndex * COL_GAP + 40
+
+    // Filter items by search and active state
+    const filteredItems = col.items.filter((item) => {
+      const nodeId = col.type === 'plugin' ? `plugin-${item.id}` : (col.type === 'mcp' ? `mcp-${item.name}` : `${col.type}-${item.slug}`)
+      const name = col.type === 'plugin' ? item.name : (col.type === 'mcp' ? item.name : item.frontmatter?.name ?? item.slug)
+      const desc = col.type === 'plugin' ? item.description : (col.type === 'mcp' ? '' : item.frontmatter?.description)
+      if (!matchesSearch(name, desc)) return false
+      return matchesActiveFilter(nodeId, item, col.type)
+    })
+
+    if (filteredItems.length === 0) return
 
     // Column header node (non-interactive)
     result.push({
       id: `header-${col.type}`,
       type: 'columnHeader',
       position: { x, y: HEADER_Y },
-      data: { label: columnLabels[col.type]?.label ?? col.type },
+      data: {
+        label: columnLabels[col.type]?.label ?? col.type,
+        count: filteredItems.length,
+        color: columnLabels[col.type]?.color ?? 'var(--text-disabled)',
+      },
       selectable: false,
       draggable: false,
       connectable: false,
     })
 
-    col.items.forEach((item, i) => {
+    filteredItems.forEach((item, i) => {
       const y = i * Y_GAP + 40
       const nodeId = col.type === 'plugin' ? `plugin-${item.id}` : (col.type === 'mcp' ? `mcp-${item.name}` : `${col.type}-${item.slug}`)
       const isOrphan = !connectedNodeIds.value.has(nodeId)
@@ -106,7 +174,8 @@ const nodes = computed(() => {
             orphan: isOrphan,
           },
         })
-      } else if (col.type === 'command') {
+      }
+      else if (col.type === 'command') {
         result.push({
           id: nodeId,
           type: 'command',
@@ -120,7 +189,8 @@ const nodes = computed(() => {
             orphan: isOrphan,
           },
         })
-      } else if (col.type === 'skill') {
+      }
+      else if (col.type === 'skill') {
         result.push({
           id: nodeId,
           type: 'skill',
@@ -133,7 +203,8 @@ const nodes = computed(() => {
             orphan: isOrphan,
           },
         })
-      } else if (col.type === 'plugin') {
+      }
+      else if (col.type === 'plugin') {
         result.push({
           id: nodeId,
           type: 'plugin',
@@ -148,7 +219,8 @@ const nodes = computed(() => {
             orphan: isOrphan,
           },
         })
-      } else if (col.type === 'mcp') {
+      }
+      else if (col.type === 'mcp') {
         result.push({
           id: nodeId,
           type: 'mcp',
@@ -170,27 +242,44 @@ const nodes = computed(() => {
 
 const edgeRelationshipLabels: Record<string, string> = {
   spawns: 'spawns',
-  'agent-frontmatter': 'uses agent',
+  'agent-frontmatter': 'uses',
   'spawned-by': 'invokes',
 }
 
+// Edge colors per relationship type — more vivid
+const edgeColors: Record<string, string> = {
+  spawns: 'var(--accent)',
+  'agent-frontmatter': '#34d399',
+  'spawned-by': '#818cf8',
+}
+
 const edges = computed(() => {
-  return relationships.value.map((r, i) => ({
-    id: `edge-${i}`,
-    source: `${r.sourceType}-${r.sourceSlug}`,
-    target: `${r.targetType}-${r.targetSlug}`,
-    type: 'smoothstep',
-    animated: r.type === 'spawns',
-    label: edgeRelationshipLabels[r.type] ?? r.type,
-    labelStyle: { opacity: 0 },
-    labelBgStyle: { opacity: 0 },
-    data: { relType: r.type },
-    style: {
-      stroke: r.type === 'spawns' ? 'var(--accent)' : r.type === 'agent-frontmatter' ? 'var(--success)' : 'var(--text-disabled)',
-      strokeWidth: r.type === 'spawns' ? 2 : 1,
-      opacity: r.type === 'spawns' ? 0.7 : 0.4,
-    },
-  }))
+  // Only show edges where both endpoints are visible
+  const visibleNodeIds = new Set(nodes.value.map(n => n.id))
+  return relationships.value
+    .filter(r =>
+      visibleNodeIds.has(`${r.sourceType}-${r.sourceSlug}`) &&
+      visibleNodeIds.has(`${r.targetType}-${r.targetSlug}`)
+    )
+    .map((r, i) => {
+      const color = edgeColors[r.type] ?? 'var(--border-emphasis)'
+      return {
+        id: `edge-${i}`,
+        source: `${r.sourceType}-${r.sourceSlug}`,
+        target: `${r.targetType}-${r.targetSlug}`,
+        type: 'smoothstep',
+        animated: r.type === 'spawns',
+        label: edgeRelationshipLabels[r.type] ?? r.type,
+        labelStyle: { opacity: 0 },
+        labelBgStyle: { opacity: 0 },
+        data: { relType: r.type },
+        style: {
+          stroke: color,
+          strokeWidth: r.type === 'spawns' ? 2.5 : 1.5,
+          opacity: r.type === 'spawns' ? 0.85 : 0.65,
+        },
+      }
+    })
 })
 
 // --- Hover highlighting ---
@@ -242,9 +331,6 @@ function hasClientXY(e: unknown): e is { clientX: number; clientY: number } {
   )
 }
 
-/**
- * @vue-flow/core may call handlers as either (event, node) or a single payload { event, node }.
- */
 function parseVueFlowNodeArgs(first: unknown, second?: unknown): {
   event: { clientX: number; clientY: number } | undefined
   node: any
@@ -288,7 +374,6 @@ function applyHighlightClasses() {
   el.classList.add('graph-dimmed')
 
   nextTick(() => {
-    // Highlight nodes
     el.querySelectorAll('.vue-flow__node').forEach((nodeEl) => {
       const id = nodeEl.getAttribute('data-id')
       if (id && highlightedNodeIds.value.has(id)) {
@@ -298,7 +383,6 @@ function applyHighlightClasses() {
       }
     })
 
-    // Highlight edges + show labels
     el.querySelectorAll('.vue-flow__edge').forEach((edgeEl) => {
       const id = edgeEl.getAttribute('data-id')
       if (id && highlightedEdgeIds.value.has(id)) {
@@ -326,7 +410,6 @@ function clearHighlightClasses() {
   el.querySelectorAll('.graph-highlighted').forEach(e => e.classList.remove('graph-highlighted'))
   el.querySelectorAll('.graph-edge-highlighted').forEach(e => e.classList.remove('graph-edge-highlighted'))
 
-  // Hide all edge labels
   el.querySelectorAll('.vue-flow__edge-text').forEach((e) => {
     ;(e as HTMLElement).style.opacity = '0'
   })
@@ -342,8 +425,8 @@ function showTooltip(event: { clientX: number; clientY: number }, description: s
   if (!description) return
   tooltip.value = {
     text: description,
-    x: event.clientX + 12,
-    y: event.clientY + 12,
+    x: event.clientX + 14,
+    y: event.clientY + 14,
   }
 }
 
@@ -351,7 +434,6 @@ function hideTooltip() {
   tooltip.value = null
 }
 
-// Combined handlers
 function handleNodeMouseEnter(first: unknown, second?: unknown) {
   const { event, node } = parseVueFlowNodeArgs(first, second)
   onNodeMouseEnter(first, second)
@@ -372,51 +454,171 @@ function onNodeClick(first: unknown, second?: unknown) {
   else if (node.type === 'plugin') router.push(`/plugins/${node.data.id}`)
   else if (node.type === 'mcp') router.push({ path: `/mcp/${encodeURIComponent(node.data.name)}`, query: { scope: node.data.scope } })
 }
+
+// Stats
+const visibleNodeCount = computed(() => nodes.value.filter(n => n.type !== 'columnHeader').length)
+const visibleEdgeCount = computed(() => edges.value.length)
+const totalNodeCount = computed(() => {
+  return (agents.value.length + commands.value.length + skills.value.length + plugins.value.length + mcpServers.value.length)
+})
+const activeNodeCount = computed(() =>
+  nodes.value.filter(n => n.type !== 'columnHeader' && !n.data?.orphan).length
+)
 </script>
 
 <template>
   <div class="relative h-screen flex flex-col">
     <!-- Floating header -->
     <div
-      class="absolute top-0 left-0 right-0 z-10 h-14 flex items-center gap-3 px-6"
-      style="background: color-mix(in srgb, var(--surface-base) 85%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-subtle);"
+      class="absolute top-0 left-0 right-0 z-10 flex flex-col gap-0 px-5"
+      style="background: color-mix(in srgb, var(--surface-base) 90%, transparent); backdrop-filter: blur(14px); border-bottom: 1px solid var(--border-subtle);"
     >
-      <h1 class="text-page-title flex-1">Graph</h1>
-      <span class="font-mono text-[11px]" style="color: var(--text-disabled);">
-        {{ nodes.filter(n => n.type !== 'columnHeader').length }} nodes
-      </span>
-      <span class="font-mono text-[11px]" style="color: var(--text-disabled);">
-        {{ edges.length }} edges
-      </span>
-      <button
-        class="font-mono text-[11px] px-2 py-1 rounded focus-ring"
-        style="color: var(--text-tertiary); background: var(--surface-raised); border: 1px solid var(--border-default);"
-        @click="showLegend = !showLegend"
-      >
-        {{ showLegend ? 'Hide' : 'Show' }} Legend
-      </button>
+      <!-- Top row: title + stats + legend toggle -->
+      <div class="h-12 flex items-center gap-3">
+        <h1 class="text-page-title">Graph</h1>
+
+        <!-- Stats -->
+        <div class="flex items-center gap-3 ml-2">
+          <span class="font-mono text-[11px]" style="color: var(--text-disabled);">
+            <span style="color: var(--text-secondary);">{{ visibleNodeCount }}</span>
+            <span v-if="visibleNodeCount !== totalNodeCount" style="color: var(--text-disabled);">/{{ totalNodeCount }}</span>
+            <span class="ml-1">nodes</span>
+          </span>
+          <span class="font-mono text-[11px]" style="color: var(--text-disabled);">
+            <span style="color: var(--text-secondary);">{{ visibleEdgeCount }}</span>
+            <span class="ml-1">edges</span>
+          </span>
+          <span v-if="!showActiveOnly" class="font-mono text-[11px]" style="color: var(--text-disabled);">
+            <span style="color: var(--success);">{{ activeNodeCount }}</span> active
+          </span>
+        </div>
+
+        <div class="flex-1" />
+
+        <!-- Legend toggle -->
+        <button
+          class="font-mono text-[11px] px-2.5 py-1 rounded focus-ring flex items-center gap-1.5"
+          :style="{
+            color: showLegend ? 'var(--accent)' : 'var(--text-tertiary)',
+            background: showLegend ? 'rgba(229,169,62,0.08)' : 'var(--surface-raised)',
+            border: `1px solid ${showLegend ? 'rgba(229,169,62,0.25)' : 'var(--border-default)'}`,
+          }"
+          @click="showLegend = !showLegend"
+        >
+          <UIcon name="i-lucide-map" class="size-3" />
+          Legend
+        </button>
+      </div>
+
+      <!-- Filter row -->
+      <div class="h-10 flex items-center gap-2 pb-1">
+        <!-- Search -->
+        <div class="relative flex items-center">
+          <UIcon name="i-lucide-search" class="absolute left-2.5 size-3.5 pointer-events-none" style="color: var(--text-disabled);" />
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search nodes..."
+            class="font-mono text-[11px] pl-8 pr-3 py-1 rounded-md outline-none w-44 focus:w-56 transition-all"
+            style="background: var(--surface-raised); border: 1px solid var(--border-default); color: var(--text-primary);"
+          />
+          <button
+            v-if="searchQuery"
+            class="absolute right-2 size-3.5 flex items-center justify-center"
+            style="color: var(--text-disabled);"
+            @click="searchQuery = ''"
+          >
+            <UIcon name="i-lucide-x" class="size-3" />
+          </button>
+        </div>
+
+        <!-- Active Only toggle -->
+        <button
+          class="flex items-center gap-1.5 font-mono text-[10px] px-2.5 py-1 rounded-full transition-all shrink-0"
+          :style="{
+            background: showActiveOnly ? 'rgba(34, 197, 94, 0.12)' : 'var(--surface-raised)',
+            border: `1px solid ${showActiveOnly ? 'rgba(34, 197, 94, 0.35)' : 'var(--border-subtle)'}`,
+            color: showActiveOnly ? 'var(--success)' : 'var(--text-tertiary)',
+          }"
+          @click="showActiveOnly = !showActiveOnly"
+        >
+          <span
+            class="size-1.5 rounded-full shrink-0"
+            :style="{ background: showActiveOnly ? 'var(--success)' : 'var(--text-disabled)' }"
+          />
+          Active only
+        </button>
+
+        <!-- Divider -->
+        <div class="h-4 w-px mx-0.5" style="background: var(--border-subtle);" />
+
+        <!-- Type filters -->
+        <div class="flex items-center gap-1.5">
+          <button
+            v-for="type in allFilterTypes"
+            :key="type"
+            class="font-mono text-[10px] px-2.5 py-0.5 rounded-full transition-all"
+            :style="{
+              background: activeFilters.has(type) ? `${columnLabels[type]?.color}18` : 'var(--surface-raised)',
+              border: `1px solid ${activeFilters.has(type) ? `${columnLabels[type]?.color}40` : 'var(--border-subtle)'}`,
+              color: activeFilters.has(type) ? columnLabels[type]?.color : 'var(--text-tertiary)',
+            }"
+            @click="toggleFilter(type)"
+          >
+            {{ columnLabels[type]?.label ?? type }}
+          </button>
+        </div>
+
+        <!-- Clear filters -->
+        <button
+          v-if="activeFilters.size > 0 || searchQuery || showActiveOnly"
+          class="font-mono text-[10px] px-2 py-0.5 rounded"
+          style="color: var(--text-disabled);"
+          @click="activeFilters = new Set(); searchQuery = ''; showActiveOnly = false"
+        >
+          Clear
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="flex-1 flex items-center justify-center" style="background: var(--surface-base);">
       <UIcon name="i-lucide-loader-2" class="size-6 animate-spin" style="color: var(--text-disabled);" />
     </div>
 
-    <div v-else ref="graphCanvasRef" class="flex-1 graph-canvas">
+    <!-- Empty state -->
+    <div
+      v-else-if="visibleNodeCount === 0"
+      class="flex-1 flex flex-col items-center justify-center gap-3"
+      style="background: var(--surface-base); margin-top: 88px;"
+    >
+      <UIcon name="i-lucide-search-x" class="size-8" style="color: var(--text-disabled);" />
+      <p class="font-mono text-sm" style="color: var(--text-tertiary);">No nodes match your search</p>
+      <button
+        class="font-mono text-xs px-3 py-1.5 rounded-md"
+        style="background: var(--surface-raised); color: var(--text-secondary); border: 1px solid var(--border-default);"
+        @click="activeFilters = new Set(); searchQuery = ''; showActiveOnly = false"
+      >
+        Clear filters
+      </button>
+    </div>
+
+    <div v-else ref="graphCanvasRef" class="flex-1 graph-canvas" style="margin-top: 88px;">
       <VueFlow
         :nodes="nodes"
         :edges="edges"
         fit-view-on-init
         :default-edge-options="{ type: 'smoothstep' }"
-        :min-zoom="0.3"
+        :min-zoom="0.2"
         :max-zoom="2"
         @node-click="onNodeClick"
         @node-mouse-enter="handleNodeMouseEnter"
         @node-mouse-leave="handleNodeMouseLeave"
       >
-        <!-- Column header (non-interactive label) -->
+        <!-- Column header -->
         <template #node-columnHeader="{ data }">
-          <div class="graph-col-header">
-            {{ data.label }}
+          <div class="graph-col-header" :style="{ '--col-color': data.color }">
+            <span>{{ data.label }}</span>
+            <span class="graph-col-count">{{ data.count }}</span>
           </div>
         </template>
 
@@ -426,22 +628,27 @@ function onNodeClick(first: unknown, second?: unknown) {
             class="graph-node graph-node--agent"
             :class="{ 'graph-node--orphan': data.orphan }"
             :style="{
-              '--node-glow': `${data.color}25`,
-              borderColor: data.orphan ? undefined : `${data.color}30`,
+              '--node-glow': `${data.color}30`,
+              borderColor: data.orphan ? undefined : `${data.color}45`,
+              borderLeftColor: data.color,
+              borderLeftWidth: '3px',
             }"
           >
             <div class="flex items-center gap-2">
               <div class="size-2 rounded-full shrink-0" :style="{ background: data.color }" />
-              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-primary);">
+              <span class="font-mono text-[11px] font-semibold truncate" style="color: var(--text-primary); flex:1; min-width:0;">
                 {{ data.label }}
               </span>
               <span
                 v-if="data.model"
-                class="ml-auto text-[9px] font-mono font-medium px-1.5 py-px rounded-full shrink-0"
+                class="text-[9px] font-mono font-medium px-1.5 py-px rounded-full shrink-0"
                 :style="getModelBadgeStyle(data.model)"
               >
                 {{ data.model }}
               </span>
+            </div>
+            <div v-if="data.description" class="mt-1 text-[10px] truncate" style="color: var(--text-tertiary);">
+              {{ data.description }}
             </div>
           </div>
         </template>
@@ -449,13 +656,14 @@ function onNodeClick(first: unknown, second?: unknown) {
         <!-- Command node -->
         <template #node-command="{ data }">
           <div class="graph-node graph-node--command" :class="{ 'graph-node--orphan': data.orphan }">
-            <div class="flex items-center gap-1.5">
-              <span class="font-mono text-[10px] font-medium shrink-0" style="color: var(--text-disabled);">
-                &gt;_
-              </span>
-              <span class="font-mono text-[11px] truncate" style="color: var(--text-secondary);">
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-[10px] font-bold shrink-0" style="color: var(--text-disabled); line-height:1;">&gt;_</span>
+              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-secondary); flex:1; min-width:0;">
                 /{{ data.label }}
               </span>
+            </div>
+            <div v-if="data.description" class="mt-0.5 text-[10px] truncate" style="color: var(--text-tertiary);">
+              {{ data.description }}
             </div>
           </div>
         </template>
@@ -464,10 +672,13 @@ function onNodeClick(first: unknown, second?: unknown) {
         <template #node-skill="{ data }">
           <div class="graph-node graph-node--skill" :class="{ 'graph-node--orphan': data.orphan }">
             <div class="flex items-center gap-1.5">
-              <UIcon name="i-lucide-zap" class="size-3 shrink-0" style="color: var(--model-haiku);" />
-              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-secondary);">
+              <UIcon name="i-lucide-zap" class="size-3.5 shrink-0" style="color: var(--model-haiku);" />
+              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-secondary); flex:1; min-width:0;">
                 {{ data.label }}
               </span>
+            </div>
+            <div v-if="data.description" class="mt-0.5 text-[10px] truncate" style="color: var(--text-tertiary);">
+              {{ data.description }}
             </div>
           </div>
         </template>
@@ -476,12 +687,12 @@ function onNodeClick(first: unknown, second?: unknown) {
         <template #node-plugin="{ data }">
           <div class="graph-node graph-node--plugin" :class="{ 'graph-node--orphan': data.orphan }">
             <div class="flex items-center gap-1.5">
-              <UIcon name="i-lucide-puzzle" class="size-3 shrink-0" style="color: var(--model-sonnet);" />
-              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-secondary);">
+              <UIcon name="i-lucide-puzzle" class="size-3.5 shrink-0" style="color: var(--model-sonnet);" />
+              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-secondary); flex:1; min-width:0;">
                 {{ data.label }}
               </span>
               <span
-                class="ml-auto text-[9px] font-mono px-1 py-px rounded-full shrink-0"
+                class="text-[9px] font-mono px-1.5 py-px rounded-full shrink-0"
                 :style="{
                   background: data.enabled ? 'rgba(74,222,128,0.15)' : 'var(--badge-subtle-bg)',
                   color: data.enabled ? 'var(--success)' : 'var(--text-disabled)',
@@ -500,12 +711,12 @@ function onNodeClick(first: unknown, second?: unknown) {
         <template #node-mcp="{ data }">
           <div class="graph-node graph-node--mcp" :class="{ 'graph-node--orphan': data.orphan }">
             <div class="flex items-center gap-1.5">
-              <UIcon name="i-lucide-server" class="size-3 shrink-0" style="color: var(--accent);" />
-              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-secondary);">
+              <UIcon name="i-lucide-server" class="size-3.5 shrink-0" style="color: var(--accent);" />
+              <span class="font-mono text-[11px] font-medium truncate" style="color: var(--text-secondary); flex:1; min-width:0;">
                 {{ data.label }}
               </span>
               <span
-                class="ml-auto text-[8px] font-mono px-1 py-px rounded-full shrink-0 uppercase border"
+                class="text-[8px] font-mono px-1 py-px rounded-full shrink-0 uppercase border"
                 :style="{
                   borderColor: data.scope === 'global' ? 'rgba(229,169,62,0.3)' : 'var(--border-subtle)',
                   color: data.scope === 'global' ? 'var(--accent)' : 'var(--text-disabled)',
@@ -518,7 +729,7 @@ function onNodeClick(first: unknown, second?: unknown) {
         </template>
 
         <Controls position="bottom-right" />
-        <MiniMap position="top-right" :style="{ marginTop: '64px' }" />
+        <MiniMap position="top-right" :style="{ marginTop: '8px' }" />
       </VueFlow>
 
       <!-- Hover tooltip -->
@@ -534,16 +745,18 @@ function onNodeClick(first: unknown, second?: unknown) {
       <Transition name="page">
         <div
           v-if="showLegend"
-          class="absolute bottom-4 left-4 z-10 rounded-lg p-3 text-[11px] space-y-2"
-          style="background: color-mix(in srgb, var(--surface-base) 92%, transparent); backdrop-filter: blur(12px); border: 1px solid var(--border-default);"
+          class="absolute bottom-4 left-4 z-10 rounded-xl p-3 text-[11px] space-y-1.5"
+          style="background: color-mix(in srgb, var(--surface-base) 94%, transparent); backdrop-filter: blur(14px); border: 1px solid var(--border-default); min-width: 160px;"
         >
-          <div class="font-mono font-semibold mb-2" style="color: var(--text-secondary);">Legend</div>
+          <div class="font-mono text-[10px] font-semibold mb-2 uppercase tracking-wider" style="color: var(--text-disabled);">Legend</div>
+
+          <div class="font-mono text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-disabled);">Node Types</div>
           <div class="flex items-center gap-2">
-            <div class="size-2.5 rounded-full" style="background: var(--accent);" />
+            <div class="size-2 rounded-full" style="background: var(--accent);" />
             <span style="color: var(--text-tertiary);">Agent</span>
           </div>
           <div class="flex items-center gap-2">
-            <span class="font-mono text-[9px]" style="color: var(--text-disabled);">&gt;_</span>
+            <span class="font-mono text-[9px] font-bold" style="color: var(--text-disabled);">&gt;_</span>
             <span style="color: var(--text-tertiary);">Command</span>
           </div>
           <div class="flex items-center gap-2">
@@ -558,22 +771,29 @@ function onNodeClick(first: unknown, second?: unknown) {
             <UIcon name="i-lucide-server" class="size-3" style="color: var(--accent);" />
             <span style="color: var(--text-tertiary);">MCP Server</span>
           </div>
-          <hr style="border-color: var(--border-subtle);" />
+
+          <hr class="my-1.5" style="border-color: var(--border-subtle);" />
+          <div class="font-mono text-[9px] uppercase tracking-wider mb-1" style="color: var(--text-disabled);">Connections</div>
           <div class="flex items-center gap-2">
             <div class="w-5 h-[2px] rounded-full" style="background: var(--accent);" />
-            <span style="color: var(--text-tertiary);">Spawns / provides</span>
+            <span style="color: var(--text-tertiary);">Spawns</span>
           </div>
           <div class="flex items-center gap-2">
-            <div class="w-5 h-[1px] rounded-full" style="background: var(--success); opacity: 0.5;" />
+            <div class="w-5 h-[1.5px] rounded-full" style="background: #34d399;" />
             <span style="color: var(--text-tertiary);">Uses</span>
           </div>
-          <hr style="border-color: var(--border-subtle);" />
+          <div class="flex items-center gap-2">
+            <div class="w-5 h-[1.5px] rounded-full" style="background: #818cf8;" />
+            <span style="color: var(--text-tertiary);">Invokes</span>
+          </div>
+
+          <hr class="my-1.5" style="border-color: var(--border-subtle);" />
           <div class="flex items-center gap-2">
             <div class="size-3 rounded" style="border: 1px dashed var(--border-default); opacity: 0.55;" />
             <span style="color: var(--text-tertiary);">No connections</span>
           </div>
-          <div class="mt-1" style="color: var(--text-disabled);">
-            Hover a node to highlight connections
+          <div class="mt-1.5 text-[10px]" style="color: var(--text-disabled);">
+            Hover to highlight · Click to open
           </div>
         </div>
       </Transition>

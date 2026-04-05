@@ -3,7 +3,7 @@ import { getAgentColor } from '~/utils/colors'
 import { getModelBadgeClasses } from '~/utils/models'
 import { agentTemplates } from '~/utils/templates'
 
-const { agents, loading, error, create, fetchAll: fetchAgents } = useAgents()
+const { agents, loading, error, create, remove, fetchAll: fetchAgents } = useAgents()
 const router = useRouter()
 const toast = useToast()
 
@@ -12,6 +12,39 @@ const showImportModal = ref(false)
 const searchQuery = ref('')
 const skillCounts = ref<Record<string, number>>({})
 const creatingTemplate = ref<string | null>(null)
+
+// --- Bulk selection ---
+const selectedSlugs = ref<Set<string>>(new Set())
+
+const isSelected = (slug: string) => selectedSlugs.value.has(slug)
+
+function toggleSelect(slug: string, event: MouseEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  const next = new Set(selectedSlugs.value)
+  if (next.has(slug)) next.delete(slug)
+  else next.add(slug)
+  selectedSlugs.value = next
+}
+
+function selectAll() {
+  selectedSlugs.value = new Set(filteredAgents.value.map(a => a.slug))
+}
+
+function clearSelection() {
+  selectedSlugs.value = new Set()
+}
+
+async function deleteSelected() {
+  const slugs = Array.from(selectedSlugs.value)
+  try {
+    await Promise.all(slugs.map(slug => remove(slug)))
+    toast.add({ title: `Deleted ${slugs.length} agent${slugs.length === 1 ? '' : 's'}`, color: 'success' })
+    clearSelection()
+  } catch (e: any) {
+    toast.add({ title: 'Delete failed', description: e.data?.message || e.message, color: 'error' })
+  }
+}
 
 onMounted(async () => {
   try {
@@ -122,57 +155,76 @@ async function useTemplate(templateId: string) {
 
           <!-- Card grid -->
           <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            <NuxtLink
+            <div
               v-for="agent in groupAgents"
               :key="agent.slug"
-              :to="`/agents/${agent.slug}`"
-              class="rounded-xl p-4 focus-ring hover-lift border border-subtle relative overflow-hidden group bg-card"
+              class="relative group"
             >
-              <!-- Color accent bar -->
-              <div
-                class="absolute inset-x-0 top-0 h-[4px] transition-opacity duration-200"
-                :style="{ background: getAgentColor(agent.frontmatter.color) }"
-              />
+              <!-- Checkbox overlay (visible on hover or when any item is selected) -->
+              <button
+                class="agent-checkbox"
+                :class="{ 'agent-checkbox--visible': isSelected(agent.slug) || selectedSlugs.size > 0 }"
+                :aria-label="isSelected(agent.slug) ? 'Deselect' : 'Select'"
+                @click="(e) => toggleSelect(agent.slug, e)"
+              >
+                <UIcon
+                  :name="isSelected(agent.slug) ? 'i-lucide-check-square' : 'i-lucide-square'"
+                  class="size-4"
+                  :style="{ color: isSelected(agent.slug) ? 'var(--accent)' : 'var(--text-meta)' }"
+                />
+              </button>
 
-              <!-- Hover glow in agent color -->
-              <div
-                class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                :style="{ background: 'radial-gradient(ellipse at top, ' + getAgentColor(agent.frontmatter.color) + '08 0%, transparent 60%)' }"
-              />
-
-              <!-- Header: icon + name + model -->
-              <div class="flex items-center gap-3 mb-2 relative">
+              <NuxtLink
+                :to="`/agents/${agent.slug}`"
+                class="rounded-xl p-4 focus-ring hover-lift border border-subtle relative overflow-hidden group bg-card block"
+                :style="isSelected(agent.slug) ? 'border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent);' : ''"
+              >
+                <!-- Color accent bar -->
                 <div
-                  class="size-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
-                  :style="{ background: getAgentColor(agent.frontmatter.color) + '18', border: '1px solid ' + getAgentColor(agent.frontmatter.color) + '25' }"
-                >
-                  <UIcon name="i-lucide-cpu" class="size-3.5" :style="{ color: getAgentColor(agent.frontmatter.color) }" />
+                  class="absolute inset-x-0 top-0 h-[4px] transition-opacity duration-200"
+                  :style="{ background: getAgentColor(agent.frontmatter.color) }"
+                />
+
+                <!-- Hover glow in agent color -->
+                <div
+                  class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                  :style="{ background: 'radial-gradient(ellipse at top, ' + getAgentColor(agent.frontmatter.color) + '08 0%, transparent 60%)' }"
+                />
+
+                <!-- Header: icon + name + model -->
+                <div class="flex items-center gap-3 mb-2 relative">
+                  <div
+                    class="size-8 rounded-lg flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
+                    :style="{ background: getAgentColor(agent.frontmatter.color) + '18', border: '1px solid ' + getAgentColor(agent.frontmatter.color) + '25' }"
+                  >
+                    <UIcon name="i-lucide-cpu" class="size-3.5" :style="{ color: getAgentColor(agent.frontmatter.color) }" />
+                  </div>
+                  <span class="text-[13px] font-medium truncate flex-1">
+                    {{ agent.frontmatter.name }}
+                  </span>
+                  <span
+                    v-if="agent.frontmatter.model"
+                    class="text-[10px] font-mono font-medium px-1.5 py-px rounded-full shrink-0"
+                    :class="[getModelBadgeClasses(agent.frontmatter.model).bg, getModelBadgeClasses(agent.frontmatter.model).text]"
+                  >
+                    {{ agent.frontmatter.model }}
+                  </span>
                 </div>
-                <span class="text-[13px] font-medium truncate flex-1">
-                  {{ agent.frontmatter.name }}
-                </span>
-                <span
-                  v-if="agent.frontmatter.model"
-                  class="text-[10px] font-mono font-medium px-1.5 py-px rounded-full shrink-0"
-                  :class="[getModelBadgeClasses(agent.frontmatter.model).bg, getModelBadgeClasses(agent.frontmatter.model).text]"
-                >
-                  {{ agent.frontmatter.model }}
-                </span>
-              </div>
 
-              <!-- Description -->
-              <p v-if="agent.frontmatter.description" class="text-[12px] leading-relaxed line-clamp-2 text-label relative">
-                {{ agent.frontmatter.description }}
-              </p>
+                <!-- Description -->
+                <p v-if="agent.frontmatter.description" class="text-[12px] leading-relaxed line-clamp-2 text-label relative">
+                  {{ agent.frontmatter.description }}
+                </p>
 
-              <!-- Skill count badge -->
-              <div v-if="skillCounts[agent.slug]" class="mt-3 pt-3 relative" style="border-top: 1px solid var(--border-subtle);">
-                <span class="text-[10px] text-meta flex items-center gap-1.5">
-                  <UIcon name="i-lucide-sparkles" class="size-3" style="color: var(--accent);" />
-                  {{ skillCounts[agent.slug] }} skill{{ skillCounts[agent.slug] === 1 ? '' : 's' }}
-                </span>
-              </div>
-            </NuxtLink>
+                <!-- Skill count badge -->
+                <div v-if="skillCounts[agent.slug]" class="mt-3 pt-3 relative" style="border-top: 1px solid var(--border-subtle);">
+                  <span class="text-[10px] text-meta flex items-center gap-1.5">
+                    <UIcon name="i-lucide-sparkles" class="size-3" style="color: var(--accent);" />
+                    {{ skillCounts[agent.slug] }} skill{{ skillCounts[agent.slug] === 1 ? '' : 's' }}
+                  </span>
+                </div>
+              </NuxtLink>
+            </div>
           </div>
         </div>
       </div>
@@ -250,5 +302,42 @@ async function useTemplate(templateId: string) {
         </div>
       </template>
     </UModal>
+
+    <!-- Bulk action bar -->
+    <BulkActionBar
+      :selected-count="selectedSlugs.size"
+      :total-count="filteredAgents.length"
+      item-label="agent"
+      @delete-selected="deleteSelected"
+      @clear-selection="clearSelection"
+      @select-all="selectAll"
+    />
   </div>
 </template>
+
+<style scoped>
+/* Checkbox positioned at top-left of card, shown on hover or when selection active */
+.agent-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  backdrop-filter: blur(4px);
+}
+
+.group:hover .agent-checkbox,
+.agent-checkbox--visible {
+  opacity: 1;
+}
+</style>

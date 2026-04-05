@@ -263,6 +263,15 @@ const plugins = computed(() => {
 
 const charCount = computed(() => rawJson.value.length)
 const lineCount = computed(() => rawJson.value.split('\n').length)
+
+// ---- Export/Import ----
+const showExportImport = ref(false)
+const exportImportInitialTab = ref<'export' | 'import'>('export')
+
+function openExportImport(tab: 'export' | 'import') {
+  exportImportInitialTab.value = tab
+  showExportImport.value = true
+}
 </script>
 
 <template>
@@ -502,6 +511,30 @@ const lineCount = computed(() => rawJson.value.split('\n').length)
           </div>
         </div>
       </div>
+      <!-- Data Management -->
+      <div class="rounded-xl p-5 space-y-4 bg-card">
+        <h3 class="text-section-title">Data Management</h3>
+        <p class="text-[12px] text-meta">
+          Export all your agents, commands, skills, and workflows as a backup, or import a previously exported config file.
+        </p>
+        <div class="flex items-center gap-3">
+          <UButton
+            label="Export Config"
+            icon="i-lucide-download"
+            size="sm"
+            variant="soft"
+            @click="openExportImport('export')"
+          />
+          <UButton
+            label="Import Config"
+            icon="i-lucide-upload"
+            size="sm"
+            variant="soft"
+            @click="openExportImport('import')"
+          />
+        </div>
+      </div>
+
     </div>
 
     <!-- Raw JSON editor -->
@@ -568,6 +601,13 @@ const lineCount = computed(() => rawJson.value.split('\n').length)
         </div>
       </template>
     </UModal>
+
+    <!-- Export/Import Modal -->
+    <ExportImportModal
+      v-model="showExportImport"
+      :initial-tab="exportImportInitialTab"
+      @close="showExportImport = false"
+    />
 
     <!-- Delete Confirmation Modal -->
     <UModal v-model:open="showRemoveConfirm">

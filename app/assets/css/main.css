@@ -2,153 +2,140 @@
 @import "@nuxt/ui";
 
 @theme static {
-  --font-display: "Clash Display", "Geist Sans", system-ui, sans-serif;
-  --font-sans: "Geist Sans", "Geist", system-ui, sans-serif;
-  --font-mono: "Geist Mono", "SF Mono", ui-monospace, monospace;
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Fira Code", "SF Mono", ui-monospace, monospace;
 }
 
 /* ============================================
-   Color System — Precision Instrument
+   Color System — Figma / Notion Dark
    ============================================ */
 
 :root {
-  /* ---- Light mode (default) ---- */
+  /* ---- Light mode — Warm White ---- */
 
-  /* Surfaces */
-  --surface-base: #f5f6f8;
+  --surface-base: #f5f5f5;
   --surface-raised: #ffffff;
   --surface-overlay: #ffffff;
-  --surface-hover: #edeef2;
-  --surface-inset: #ecedf1;
+  --surface-hover: #ebebeb;
+  --surface-inset: #e0e0e0;
 
-  /* Borders */
-  --border-subtle: rgba(0, 0, 0, 0.06);
-  --border-default: rgba(0, 0, 0, 0.1);
-  --border-emphasis: rgba(0, 0, 0, 0.18);
+  --border-subtle: rgba(123, 97, 255, 0.1);
+  --border-default: rgba(123, 97, 255, 0.18);
+  --border-emphasis: rgba(123, 97, 255, 0.35);
 
-  /* Text */
-  --text-primary: #111118;
-  --text-secondary: #53535f;
-  --text-tertiary: #82828e;
-  --text-disabled: #ababb5;
+  --text-primary: #1a1a1a;
+  --text-secondary: #3d3d3d;
+  --text-tertiary: #6b6b6b;
+  --text-disabled: #b0b0b0;
 
-  /* Accent — warm amber */
-  --accent: #b45309;
-  --accent-hover: #d97706;
-  --accent-glow: rgba(180, 83, 9, 0.12);
-  --accent-muted: rgba(180, 83, 9, 0.08);
-  --accent-gradient: linear-gradient(135deg, #b45309 0%, #92400e 100%);
+  --accent: #00c9a7;
+  --accent-hover: #00b394;
+  --accent-glow: rgba(0, 201, 167, 0.2);
+  --accent-muted: rgba(0, 201, 167, 0.08);
+  --accent-gradient: linear-gradient(135deg, #00c9a7 0%, #00a8e8 100%);
 
-  /* Secondary accent — indigo */
-  --accent-secondary: #6366f1;
-  --accent-secondary-muted: rgba(99, 102, 241, 0.08);
+  --accent-secondary: #00a8e8;
+  --accent-secondary-muted: rgba(0, 168, 232, 0.08);
 
-  /* Radius system */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 
-  /* Model tiers */
-  --model-opus: #7c3aed;
-  --model-sonnet: #2563eb;
-  --model-haiku: #d97706;
+  --model-opus: #00c9a7;
+  --model-sonnet: #00a8e8;
+  --model-haiku: #7b61ff;
 
-  /* Semantic */
-  --success: #059669;
-  --warning: #d97706;
-  --error: #dc2626;
+  --success: #1db87a;
+  --warning: #f5a623;
+  --error: #f24822;
 
-  /* Mode-dependent helpers */
-  --input-bg: rgba(0, 0, 0, 0.025);
-  --input-bg-hover: rgba(0, 0, 0, 0.04);
-  --input-bg-focus: rgba(0, 0, 0, 0.02);
-  --badge-subtle-bg: rgba(0, 0, 0, 0.05);
-  --pill-shadow: rgba(0, 0, 0, 0.08);
-  --card-shadow: rgba(0, 0, 0, 0.06);
-  --swatch-ring: rgba(0, 0, 0, 0.3);
-  --scrollbar-thumb: rgba(0, 0, 0, 0.08);
-  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.15);
-  --skeleton-from: rgba(0, 0, 0, 0.03);
-  --skeleton-to: rgba(0, 0, 0, 0.06);
-  --graph-node-bg: rgba(255, 255, 255, 0.94);
-  --graph-tooltip-bg: rgba(255, 255, 255, 0.95);
-  --sidebar-bg: linear-gradient(180deg, #edeef2 0%, #f5f6f8 100%);
+  --input-bg: rgba(0, 0, 0, 0.03);
+  --input-bg-hover: rgba(0, 0, 0, 0.06);
+  --input-bg-focus: rgba(0, 0, 0, 0.04);
+  --badge-subtle-bg: rgba(0, 201, 167, 0.07);
+  --pill-shadow: rgba(0, 0, 0, 0.1);
+  --card-shadow: rgba(0, 0, 0, 0.07);
+  --swatch-ring: rgba(0, 0, 0, 0.2);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.22);
+  --skeleton-from: rgba(0, 0, 0, 0.04);
+  --skeleton-to: rgba(0, 0, 0, 0.09);
+  --graph-node-bg: rgba(255, 255, 255, 0.96);
+  --graph-tooltip-bg: rgba(255, 255, 255, 0.98);
+  --sidebar-bg: linear-gradient(180deg, #ebebeb 0%, #f5f5f5 100%);
 
-  /* Editor (recessed, dark even in light mode) */
-  --editor-bg: #1e1e2e;
-  --editor-text: #cdd6f4;
-  --editor-line-number: #585b70;
-  --editor-line-highlight: rgba(255, 255, 255, 0.03);
-  --editor-border: rgba(0, 0, 0, 0.12);
+  --editor-bg: #1e1e1e;
+  --editor-text: #e6e6e6;
+  --editor-line-number: #6e6e6e;
+  --editor-line-highlight: rgba(0, 201, 167, 0.06);
+  --editor-border: rgba(0, 0, 0, 0.15);
 
-  /* Noise texture overlay */
-  --noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  --noise: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.02'/%3E%3C/svg%3E");
 }
 
 .dark {
-  /* ---- Dark mode ---- */
+  /* ---- Dark mode — Figma / Notion Dark ---- */
 
-  /* Surfaces — deeper with warm tinting */
-  --surface-base: #09090b;
-  --surface-raised: #131316;
-  --surface-overlay: #1a1a1f;
-  --surface-hover: #222228;
-  --surface-inset: #0e0e11;
+  /* Surfaces — warm dark gray */
+  --surface-base: #1e1e1e;
+  --surface-raised: #2c2c2c;
+  --surface-overlay: #383838;
+  --surface-hover: #333333;
+  --surface-inset: #161616;
 
-  /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.05);
-  --border-default: rgba(255, 255, 255, 0.09);
-  --border-emphasis: rgba(255, 255, 255, 0.16);
+  /* Borders — white glass */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-emphasis: rgba(255, 255, 255, 0.2);
 
-  /* Text */
-  --text-primary: #f0f0f5;
-  --text-secondary: #9d9daa;
-  --text-tertiary: #6b6b78;
-  --text-disabled: #4a4a55;
+  /* Text — soft white */
+  --text-primary: #e6e6e6;
+  --text-secondary: #c8c8c8;
+  --text-tertiary: #ababab;
+  --text-disabled: #6e6e6e;
 
-  /* Accent */
-  --accent: #e5a93e;
-  --accent-hover: #f0be5c;
-  --accent-glow: rgba(229, 169, 62, 0.15);
-  --accent-muted: rgba(229, 169, 62, 0.08);
-  --accent-gradient: linear-gradient(135deg, #e5a93e 0%, #d4845a 100%);
+  /* Accent — Teal */
+  --accent: #00c9a7;
+  --accent-hover: #00deba;
+  --accent-glow: rgba(0, 201, 167, 0.3);
+  --accent-muted: rgba(0, 201, 167, 0.12);
+  --accent-gradient: linear-gradient(135deg, #00c9a7 0%, #00a8e8 100%);
 
-  /* Secondary accent */
-  --accent-secondary: #818cf8;
-  --accent-secondary-muted: rgba(129, 140, 248, 0.08);
+  /* Secondary — Sky blue */
+  --accent-secondary: #00a8e8;
+  --accent-secondary-muted: rgba(0, 168, 232, 0.12);
 
   /* Model tiers */
-  --model-opus: #c084fc;
-  --model-sonnet: #60a5fa;
-  --model-haiku: #fbbf24;
+  --model-opus: #00c9a7;
+  --model-sonnet: #00a8e8;
+  --model-haiku: #7b61ff;
 
   /* Semantic */
-  --success: #34d399;
-  --warning: #fbbf24;
-  --error: #f87171;
+  --success: #1db87a;
+  --warning: #f5a623;
+  --error: #f24822;
 
-  /* Mode-dependent helpers */
-  --input-bg: rgba(255, 255, 255, 0.03);
-  --input-bg-hover: rgba(255, 255, 255, 0.05);
-  --input-bg-focus: rgba(255, 255, 255, 0.035);
-  --badge-subtle-bg: rgba(255, 255, 255, 0.06);
-  --pill-shadow: rgba(0, 0, 0, 0.5);
-  --card-shadow: rgba(0, 0, 0, 0.25);
-  --swatch-ring: rgba(255, 255, 255, 0.5);
-  --scrollbar-thumb: rgba(255, 255, 255, 0.06);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.12);
-  --skeleton-from: rgba(255, 255, 255, 0.03);
-  --skeleton-to: rgba(255, 255, 255, 0.06);
-  --graph-node-bg: rgba(19, 19, 22, 0.94);
-  --graph-tooltip-bg: rgba(9, 9, 11, 0.95);
-  --sidebar-bg: linear-gradient(180deg, #0c0c10 0%, #09090b 100%);
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --input-bg-hover: rgba(255, 255, 255, 0.08);
+  --input-bg-focus: rgba(255, 255, 255, 0.06);
+  --badge-subtle-bg: rgba(0, 201, 167, 0.12);
+  --pill-shadow: rgba(0, 0, 0, 0.7);
+  --card-shadow: rgba(0, 0, 0, 0.5);
+  --swatch-ring: rgba(255, 255, 255, 0.25);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.18);
+  --skeleton-from: rgba(255, 255, 255, 0.04);
+  --skeleton-to: rgba(255, 255, 255, 0.09);
+  --graph-node-bg: rgba(44, 44, 44, 0.96);
+  --graph-tooltip-bg: rgba(30, 30, 30, 0.98);
+  --sidebar-bg: linear-gradient(180deg, #161616 0%, #1e1e1e 100%);
 
-  /* Editor */
-  --editor-bg: #0c0c10;
-  --editor-text: #cdd6f4;
-  --editor-line-number: #4a4a55;
-  --editor-line-highlight: rgba(255, 255, 255, 0.02);
-  --editor-border: rgba(255, 255, 255, 0.06);
+  --editor-bg: #161616;
+  --editor-text: #e6e6e6;
+  --editor-line-number: #6e6e6e;
+  --editor-line-highlight: rgba(0, 201, 167, 0.06);
+  --editor-border: rgba(255, 255, 255, 0.08);
 }
 
 /* ============================================
@@ -161,7 +148,7 @@ body {
 }
 
 ::selection {
-  background: rgba(229, 169, 62, 0.2);
+  background: rgba(0, 201, 167, 0.28);
   color: inherit;
 }
 
@@ -183,17 +170,17 @@ body {
 
 .text-page-title {
   font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
   color: var(--text-primary);
 }
 
 .text-section-title {
   font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-primary);
 }
@@ -201,8 +188,8 @@ body {
 .text-section-label {
   font-family: var(--font-sans);
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-tertiary);
 }
@@ -210,8 +197,34 @@ body {
 .text-mono {
   font-family: var(--font-mono);
   font-size: 13px;
-  letter-spacing: -0.01em;
+  font-weight: 500;
+  letter-spacing: 0em;
 }
+
+/* Global typography — Facebook / Inter style */
+body {
+  font-weight: 400;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings bold */
+h1 { font-weight: 800 !important; letter-spacing: -0.03em; }
+h2 { font-weight: 700 !important; letter-spacing: -0.02em; }
+h3 { font-weight: 700 !important; letter-spacing: -0.01em; }
+h4, h5, h6 { font-weight: 600 !important; }
+
+strong, b, th { font-weight: 700 !important; }
+label { font-weight: 600 !important; }
+.font-semibold { font-weight: 700 !important; }
+.font-medium { font-weight: 600 !important; }
+
+/* Nav items, buttons, badges — semi-bold */
+nav a, button, .badge { font-weight: 600; }
+
+/* Sidebar nav labels */
+.nav-label { font-weight: 700; letter-spacing: -0.01em; }
 
 /* ============================================
    Graph Canvas
@@ -234,7 +247,7 @@ body {
   background-color: var(--surface-base);
   background-image: radial-gradient(
     circle,
-    rgba(229, 169, 62, 0.04) 1px,
+    rgba(0, 201, 167, 0.08) 1px,
     transparent 1px
   );
   background-size: 28px 28px;
@@ -245,78 +258,90 @@ body {
   border: 1px solid var(--border-default);
   background: var(--graph-node-bg);
   backdrop-filter: blur(16px);
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: 10px;
+  padding: 10px 13px;
   transition:
-    border-color 0.2s,
-    box-shadow 0.2s,
+    border-color 0.15s,
+    box-shadow 0.15s,
     opacity 0.2s,
-    transform 0.2s;
+    transform 0.15s;
   cursor: pointer;
-  width: 220px;
+  width: 230px;
   overflow: hidden;
 }
 
 .graph-node:hover {
   border-color: var(--border-emphasis);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 .graph-node--agent:hover {
-  box-shadow: 0 0 28px var(--node-glow, rgba(229, 169, 62, 0.12));
+  box-shadow: 0 4px 20px var(--node-glow, rgba(69, 137, 255, 0.22));
 }
 
 .graph-node--command {
   padding: 8px 12px;
+  border-color: rgba(148, 163, 184, 0.15);
 }
 
 .graph-node--skill {
   padding: 8px 12px;
-  border-color: rgba(251, 191, 36, 0.2);
+  border-color: rgba(251, 191, 36, 0.25);
 }
 
 .graph-node--skill:hover {
-  box-shadow: 0 0 28px rgba(251, 191, 36, 0.12);
+  box-shadow: 0 4px 20px rgba(251, 191, 36, 0.15);
 }
 
 .graph-node--plugin {
   padding: 10px 12px;
-  border-color: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.25);
 }
 
 .graph-node--plugin:hover {
-  box-shadow: 0 0 28px rgba(96, 165, 250, 0.12);
+  box-shadow: 0 4px 20px rgba(96, 165, 250, 0.15);
+}
+
+.graph-node--mcp {
+  padding: 8px 12px;
 }
 
 /* Orphan nodes (no connections) */
 .graph-node--orphan {
   border-style: dashed;
-  opacity: 0.55;
+  opacity: 0.45;
 }
 .graph-node--orphan:hover {
-  opacity: 1;
+  opacity: 0.9;
 }
 
 /* Dimmed state during hover-highlight */
 .graph-dimmed .vue-flow__node {
-  opacity: 0.1;
-  transition: opacity 0.25s;
+  opacity: 0.07;
+  transition: opacity 0.2s;
 }
 .graph-dimmed .vue-flow__node.graph-highlighted {
   opacity: 1;
 }
 .graph-dimmed .vue-flow__edge {
-  opacity: 0.04 !important;
-  transition: opacity 0.25s;
+  opacity: 0.03 !important;
+  transition: opacity 0.2s;
 }
 .graph-dimmed .vue-flow__edge.graph-edge-highlighted {
   opacity: 1 !important;
 }
 
-/* Animated edges */
+/* Non-animated edges — remove global dash animation */
 .vue-flow__edge path {
+  stroke-dasharray: none;
+  animation: none;
+}
+
+/* Only animated (spawns) edges get the flow effect */
+.vue-flow__edge.animated path {
   stroke-dasharray: 6 4;
-  animation: edgeFlow 1.5s linear infinite;
+  animation: edgeFlow 2s linear infinite;
 }
 
 @keyframes edgeFlow {
@@ -329,18 +354,36 @@ body {
 .graph-col-header {
   font-family: var(--font-mono);
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-disabled);
+  color: var(--col-color, var(--text-disabled));
   background: var(--graph-node-bg);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid color-mix(in srgb, var(--col-color, var(--border-subtle)) 30%, transparent);
   border-radius: 6px;
-  padding: 4px 10px;
-  width: 220px;
+  padding: 5px 12px;
+  width: 230px;
   text-align: center;
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.graph-col-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 600;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--col-color, var(--text-disabled)) 15%, transparent);
+  color: var(--col-color, var(--text-disabled));
 }
 
 /* Hover tooltip */

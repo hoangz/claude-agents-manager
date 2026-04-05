@@ -35,5 +35,8 @@
     "@iconify-json/lucide": "^1.2.95",
     "@types/ws": "^8.18.1",
     "typescript": "^5.7"
-  }
+  },
+  "trustedDependencies": [
+    "@parcel/watcher"
+  ]
 }
