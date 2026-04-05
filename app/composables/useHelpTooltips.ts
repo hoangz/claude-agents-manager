@@ -133,13 +133,17 @@ const helpContent: Record<string, {
   },
 }
 
+// Shared state — same ref across all component instances
+const isOpen = ref(false)
+
 export function useHelpTooltips() {
   const route = useRoute()
-  const isOpen = ref(false)
 
-  const currentHelp = computed(() => {
-    const path = route.path
-    return helpContent[path] ?? null
+  const currentHelp = computed(() => helpContent[route.path] ?? null)
+
+  // Auto-close when navigating to a page with no help content
+  watch(currentHelp, (val) => {
+    if (!val) isOpen.value = false
   })
 
   return { isOpen, currentHelp }

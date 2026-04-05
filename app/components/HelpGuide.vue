@@ -3,21 +3,8 @@ const { isOpen, currentHelp } = useHelpTooltips()
 </script>
 
 <template>
-  <!-- Only render when current page has help content -->
+  <!-- Only render panel when open -->
   <template v-if="currentHelp">
-    <!-- Help button teleported into page header slot -->
-    <Teleport to="#page-header-help" defer>
-      <button
-        class="help-guide-btn"
-        :title="isOpen ? 'Đóng hướng dẫn' : 'Hướng dẫn sử dụng'"
-        :aria-label="isOpen ? 'Đóng hướng dẫn' : 'Hướng dẫn sử dụng'"
-        @click="isOpen = !isOpen"
-      >
-        <UIcon :name="isOpen ? 'i-lucide-x' : 'i-lucide-circle-help'" class="size-4" />
-        <span class="help-guide-label">Hướng dẫn</span>
-      </button>
-    </Teleport>
-
     <!-- Slide-in help panel -->
     <Teleport to="body">
       <div
@@ -112,39 +99,7 @@ const { isOpen, currentHelp } = useHelpTooltips()
   </template>
 </template>
 
-<style scoped>
-/* Inline header help button */
-.help-guide-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  font-family: var(--font-sans);
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-  background: var(--accent-muted);
-  border: 1px solid var(--border-default);
-  color: var(--accent);
-  white-space: nowrap;
-}
-
-.help-guide-btn:hover {
-  background: var(--accent-glow);
-  border-color: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
-}
-
-.help-guide-btn:active {
-  opacity: 0.8;
-}
-
-.help-guide-label {
-  display: inline;
-}
+<style>
 
 /* Backdrop overlay */
 .help-guide-overlay {

@@ -418,9 +418,7 @@ function badgeFor(to: string) {
           @complete="async () => { await loadConfig(); await Promise.all([fetchAgents(), fetchCommands(), fetchPlugins(), fetchSkills()]) }"
         />
 
-        <div v-show="initialized && claudeDirExists" class="h-full" style="position: relative;">
-          <!-- Help guide button slot — teleport target, sits at top-right of content area -->
-          <div id="page-header-help" class="page-header-help-slot" />
+        <div v-show="initialized && claudeDirExists" class="h-full">
           <NuxtPage />
         </div>
         <div v-if="!initialized" class="flex items-center justify-center h-full">
@@ -452,18 +450,4 @@ function badgeFor(to: string) {
   opacity: 0;
 }
 
-/* Help guide button slot — sticky top-right of page content */
-.page-header-help-slot {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-}
-
-.page-header-help-slot > * {
-  pointer-events: auto;
-}
 </style>
