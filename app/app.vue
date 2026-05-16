@@ -115,6 +115,7 @@ const navLinks = [
   { label: 'Plugins', icon: 'i-lucide-puzzle', to: '/plugins' },
   { label: 'Commands', icon: 'i-lucide-terminal', to: '/commands' },
   { label: 'MCP Servers', icon: 'i-lucide-server', to: '/mcp' },
+  { label: 'Data Analytics', icon: 'i-lucide-bar-chart-3', to: '/data' },
 ]
 
 const navSecondary = [
