@@ -225,77 +225,86 @@ const gameRegistry = [
 
 <template>
   <div class="flex flex-col h-full">
-    <!-- Header -->
-    <div class="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-800">
-      <div>
-        <h1 class="text-lg font-semibold flex items-center gap-2">
-          <Icon name="i-lucide-bar-chart-3" class="w-5 h-5" />
-          Data Analytics
-        </h1>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          ZingPlay game data · MCP bi-tool · 8 games · ClickHouse
-        </p>
+    <!-- Compact header: title + tabs + actions trong 1 row -->
+    <div class="flex items-center gap-4 px-4 py-1.5 border-b border-gray-200 dark:border-gray-800">
+      <h1 class="text-sm font-semibold flex items-center gap-1.5 shrink-0">
+        <Icon name="i-lucide-bar-chart-3" class="w-4 h-4" />
+        Data
+      </h1>
+
+      <!-- Tabs inline -->
+      <div class="flex items-center gap-0.5">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          class="px-2.5 py-1 text-xs font-medium rounded transition flex items-center gap-1"
+          :class="activeTab === tab.id
+            ? 'bg-blue-500 text-white'
+            : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300'"
+          @click="activeTab = tab.id"
+        >
+          <Icon :name="tab.icon" class="w-3.5 h-3.5" />
+          {{ tab.label }}
+        </button>
       </div>
-      <div class="flex items-center gap-2">
+
+      <!-- Game selector inline (chỉ show ở tab chat) -->
+      <div v-if="activeTab === 'chat'" class="flex items-center gap-1.5 ml-2 pl-3 border-l border-gray-200 dark:border-gray-800">
+        <button
+          v-for="g in (['president', 'pusoy'] as const)"
+          :key="g"
+          class="px-2 py-1 text-xs font-medium rounded transition flex items-center gap-1"
+          :class="selectedGame === g
+            ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900'
+            : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
+          @click="selectedGame = g"
+        >
+          <span>{{ gameMeta[g].emoji }}</span>
+          <span>{{ gameMeta[g].label }}</span>
+        </button>
+      </div>
+
+      <div class="flex-1" />
+
+      <!-- Action buttons -->
+      <div class="flex items-center gap-1">
         <template v-if="activeTab === 'dashboard'">
           <button
-            class="px-3 py-1.5 text-xs rounded-md border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center gap-1.5"
-            @click="reloadDashboard"
-          >
-            <Icon name="i-lucide-refresh-cw" class="w-3.5 h-3.5" /> Reload
-          </button>
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            title="Reload" @click="reloadDashboard"
+          ><Icon name="i-lucide-refresh-cw" class="w-3.5 h-3.5" /></button>
           <button
-            class="px-3 py-1.5 text-xs rounded-md border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center gap-1.5"
-            @click="openInNewTab"
-          >
-            <Icon name="i-lucide-external-link" class="w-3.5 h-3.5" /> Open
-          </button>
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            title="Open in new tab" @click="openInNewTab"
+          ><Icon name="i-lucide-external-link" class="w-3.5 h-3.5" /></button>
         </template>
         <template v-if="activeTab === 'chat'">
           <button
             v-if="messages.length"
-            class="px-3 py-1.5 text-xs rounded-md border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center gap-1.5"
-            @click="clearChat"
-          >
-            <Icon name="i-lucide-trash-2" class="w-3.5 h-3.5" /> Clear
-          </button>
+            class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            title="Clear chat" @click="clearChat"
+          ><Icon name="i-lucide-trash-2" class="w-3.5 h-3.5" /></button>
         </template>
       </div>
-    </div>
-
-    <!-- Tabs -->
-    <div class="flex items-center gap-1 px-6 pt-3 border-b border-gray-200 dark:border-gray-800">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        class="px-3 py-2 text-xs font-medium rounded-t-md transition flex items-center gap-1.5 border-b-2"
-        :class="activeTab === tab.id
-          ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-          : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
-        @click="activeTab = tab.id"
-      >
-        <Icon :name="tab.icon" class="w-3.5 h-3.5" />
-        {{ tab.label }}
-      </button>
     </div>
 
     <!-- Content -->
     <div class="flex-1 overflow-hidden">
       <!-- Tab: AI Chat -->
       <div v-if="activeTab === 'chat'" class="h-full flex">
-        <!-- Conversations sidebar -->
+        <!-- Conversations sidebar (compact) -->
         <aside
           v-if="sidebarOpen"
-          class="w-64 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50 dark:bg-gray-900/30"
+          class="w-52 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-gray-50 dark:bg-gray-900/30"
         >
-          <div class="p-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
-            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Conversations</span>
+          <div class="px-2 py-1.5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+            <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Chats</span>
             <button
               class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition"
               title="New conversation"
               @click="startNewConversation"
             >
-              <Icon name="i-lucide-plus" class="w-4 h-4" />
+              <Icon name="i-lucide-plus" class="w-3.5 h-3.5" />
             </button>
           </div>
           <div class="flex-1 overflow-y-auto p-2 space-y-1">
@@ -331,116 +340,94 @@ const gameRegistry = [
           </div>
         </aside>
 
-        <!-- Main chat area -->
-        <div class="flex-1 flex flex-col">
-        <!-- Game selector + sidebar toggle (sticky top) -->
-        <div class="px-6 py-2.5 border-b border-gray-200 dark:border-gray-800 flex items-center gap-3 bg-gray-50 dark:bg-gray-900/50">
-          <button
-            class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-800 transition"
-            :title="sidebarOpen ? 'Hide sidebar' : 'Show sidebar'"
-            @click="sidebarOpen = !sidebarOpen"
+        <!-- Main chat area (max space) -->
+        <div class="flex-1 flex flex-col min-w-0">
+          <!-- Quick actions (only when empty) -->
+          <div v-if="!messages.length" class="flex-1 flex items-center justify-center px-6">
+            <div class="w-full max-w-2xl">
+              <div class="text-center mb-4">
+                <Icon name="i-lucide-bot" class="w-8 h-8 mx-auto text-blue-500 mb-1" />
+                <h2 class="text-base font-semibold">
+                  Datanalyst —
+                  <span :class="selectedGame === 'president' ? 'text-purple-600' : 'text-blue-600'">
+                    {{ gameMeta[selectedGame].emoji }} {{ gameMeta[selectedGame].label }}
+                  </span>
+                </h2>
+                <p class="text-[11px] text-gray-500 mt-0.5">
+                  MCP bi-tool · DB: <code>{{ gameMeta[selectedGame].db }}</code>
+                </p>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <button
+                  v-for="qa in quickActions"
+                  :key="qa.label"
+                  class="px-3 py-2 text-left border border-gray-200 dark:border-gray-800 rounded hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950 transition"
+                  @click="quickAsk(qa.prompt)"
+                >
+                  <div class="text-xs font-medium">{{ qa.label }}</div>
+                  <div class="text-[10px] text-gray-500 mt-0.5 line-clamp-2">{{ qa.prompt }}</div>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Messages (full width) -->
+          <div
+            v-else
+            ref="messagesContainer"
+            class="flex-1 overflow-y-auto px-4 py-3 space-y-3"
           >
-            <Icon :name="sidebarOpen ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'" class="w-4 h-4" />
-          </button>
-          <span class="text-xs font-medium text-gray-500">🎮 Game:</span>
-          <div class="inline-flex rounded-md border border-gray-300 dark:border-gray-700 overflow-hidden">
-            <button
-              v-for="g in (['president', 'pusoy'] as const)"
-              :key="g"
-              class="px-3 py-1.5 text-xs font-medium transition flex items-center gap-1.5"
-              :class="selectedGame === g
-                ? 'bg-blue-500 text-white'
-                : 'bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'"
-              @click="selectedGame = g"
-            >
-              <span>{{ gameMeta[g].emoji }}</span>
-              <span>{{ gameMeta[g].label }}</span>
-            </button>
-          </div>
-          <span class="text-xs text-gray-400 font-mono">{{ gameMeta[selectedGame].db }}</span>
-        </div>
-
-        <!-- Quick actions (only when empty) -->
-        <div v-if="!messages.length" class="px-6 py-8 max-w-3xl mx-auto w-full">
-          <div class="text-center mb-6">
-            <Icon name="i-lucide-bot" class="w-10 h-10 mx-auto text-blue-500 mb-2" />
-            <h2 class="text-lg font-semibold">
-              Chat với Datanalyst —
-              <span :class="selectedGame === 'president' ? 'text-purple-600' : 'text-blue-600'">
-                {{ gameMeta[selectedGame].emoji }} {{ gameMeta[selectedGame].label }}
-              </span>
-            </h2>
-            <p class="text-xs text-gray-500 mt-1">
-              Senior Game Data Analyst · MCP bi-tool · Workflow 6-bước
-            </p>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <button
-              v-for="qa in quickActions"
-              :key="qa.label"
-              class="px-4 py-3 text-left text-sm border border-gray-200 dark:border-gray-800 rounded-lg hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950 transition"
-              @click="quickAsk(qa.prompt)"
-            >
-              <div class="font-medium">{{ qa.label }}</div>
-              <div class="text-xs text-gray-500 mt-1 line-clamp-2">{{ qa.prompt }}</div>
-            </button>
-          </div>
-        </div>
-
-        <!-- Messages -->
-        <div
-          v-else
-          ref="messagesContainer"
-          class="flex-1 overflow-y-auto px-6 py-4 space-y-4"
-        >
-          <ChatMessage
-            v-for="msg in messages"
-            :key="msg.id"
-            :message="msg"
-            :is-streaming="isStreaming && msg === messages[messages.length - 1]"
-            :activity="activity"
-            :status-text="statusText"
-          />
-          <div v-if="chatError" class="rounded-md bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 p-3 text-sm text-red-700 dark:text-red-300">
-            {{ chatError }}
-          </div>
-        </div>
-
-        <!-- Input -->
-        <div class="border-t border-gray-200 dark:border-gray-800 px-6 py-3">
-          <div class="flex items-end gap-2">
-            <textarea
-              v-model="chatInput"
-              rows="2"
-              placeholder="Hỏi về data game... (Enter để gửi, Shift+Enter xuống dòng)"
-              class="flex-1 resize-none px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
-              :disabled="isStreaming"
-              @keydown.enter.exact.prevent="send"
+            <ChatMessage
+              v-for="msg in messages"
+              :key="msg.id"
+              :message="msg"
+              :is-streaming="isStreaming && msg === messages[messages.length - 1]"
+              :activity="activity"
+              :status-text="statusText"
             />
-            <button
-              v-if="!isStreaming"
-              class="px-4 py-2 text-sm rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition disabled:opacity-50 flex items-center gap-1.5"
-              :disabled="!chatInput.trim()"
-              @click="send"
-            >
-              <Icon name="i-lucide-send" class="w-4 h-4" />
-              Send
-            </button>
-            <button
-              v-else
-              class="px-4 py-2 text-sm rounded-lg bg-red-500 text-white hover:bg-red-600 transition flex items-center gap-1.5"
-              @click="stopStream"
-            >
-              <Icon name="i-lucide-square" class="w-4 h-4" />
-              Stop
-            </button>
+            <div v-if="chatError" class="rounded bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 p-2 text-xs text-red-700 dark:text-red-300">
+              {{ chatError }}
+            </div>
           </div>
-          <div class="text-[10px] text-gray-400 mt-1.5 flex items-center gap-3">
-            <span><kbd class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">↵</kbd> send</span>
-            <span><kbd class="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">⇧ + ↵</kbd> newline</span>
-            <span v-if="toolCalls.length" class="ml-auto">{{ toolCalls.length }} tool calls</span>
+
+          <!-- Compact input -->
+          <div class="border-t border-gray-200 dark:border-gray-800 px-3 py-2">
+            <div class="flex items-end gap-1.5">
+              <button
+                class="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition shrink-0"
+                :title="sidebarOpen ? 'Hide chats' : 'Show chats'"
+                @click="sidebarOpen = !sidebarOpen"
+              >
+                <Icon :name="sidebarOpen ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'" class="w-3.5 h-3.5" />
+              </button>
+              <textarea
+                v-model="chatInput"
+                rows="1"
+                placeholder="Hỏi về data... (Enter gửi, Shift+Enter xuống dòng)"
+                class="flex-1 resize-none px-2.5 py-1.5 text-sm rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+                :disabled="isStreaming"
+                @keydown.enter.exact.prevent="send"
+              />
+              <button
+                v-if="!isStreaming"
+                class="px-3 py-1.5 text-xs rounded bg-blue-500 text-white hover:bg-blue-600 transition disabled:opacity-50 flex items-center gap-1 shrink-0"
+                :disabled="!chatInput.trim()"
+                @click="send"
+              >
+                <Icon name="i-lucide-send" class="w-3.5 h-3.5" /> Send
+              </button>
+              <button
+                v-else
+                class="px-3 py-1.5 text-xs rounded bg-red-500 text-white hover:bg-red-600 transition flex items-center gap-1 shrink-0"
+                @click="stopStream"
+              >
+                <Icon name="i-lucide-square" class="w-3.5 h-3.5" /> Stop
+              </button>
+            </div>
+            <div v-if="toolCalls.length" class="text-[10px] text-gray-400 mt-1 text-right">
+              {{ toolCalls.length }} tool calls
+            </div>
           </div>
-        </div>
         </div>
       </div>
 
